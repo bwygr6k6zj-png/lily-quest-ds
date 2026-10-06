@@ -202,3 +202,16 @@ button { font-family: inherit; }
   .bottom-shell { grid-template-columns: 1fr 1fr; grid-template-areas: "screen screen" "dpad abxy" "ss ss"; gap: 12px; }
   .help { display: none; }
 }
+
+/* Connexion */
+.login { justify-content: center; gap: 2cqw; }
+.login input {
+  font-family: inherit; font-size: 3.4cqw; padding: 2cqw 2.4cqw; width: 100%;
+  border: .7cqw solid #6a7ab0; border-radius: 2cqw; background: #fff; color: var(--ink);
+  -webkit-user-select: text; user-select: text;
+}
+.login .err { min-height: 3cqw; font-size: 2.4cqw; color: #c0304a; text-align: center; }
+.login .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2cqw; }
+.login .row2 .opt { min-height: 10cqw; font-size: 2.8cqw; text-align: center; }
+.login .link { background: none; border: 0; color: #4a5ca0; font-size: 2.3cqw; text-decoration: underline; cursor: pointer; padding: 1cqw; }
+.cloud { color: #4a90e8; }

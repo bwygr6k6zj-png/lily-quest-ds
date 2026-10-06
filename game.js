@@ -427,15 +427,66 @@ let topScene = 'title';  // ce qu'affiche l'écran du haut
 let B = null;            // combat en cours
 let dlg = null, menu = null, overlay = null, introPick = null, tick = 0;
 const P = { moving: false, t: 0, fx: 0, fy: 0, step: 0 };
-const SAVE_KEY = 'lilyquest-ds-save';
+const SAVE_KEY = 'lilyquest-ds-save', TOKEN_KEY = 'lilyquest-ds-token';
 
-function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(G)); } catch (e) { /* stockage bloqué */ } }
-function loadSave() {
+// ---------- Comptes joueurs (pseudo + mot de passe, sauvegarde en ligne) ----------
+const account = { user: null, token: null, offline: false };
+const store = {
+  get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* stockage bloqué */ } },
+  del: k => { try { localStorage.removeItem(k); } catch (e) { /* stockage bloqué */ } },
+};
+async function api(path, { method = 'POST', body } = {}) {
+  let r;
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && Array.isArray(s.team) && s.team.length && s.team.every(m => SPECIES[m.id])) return s;
-  } catch (e) { /* ignore */ }
+    r = await fetch(`/api/${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(account.token ? { Authorization: `Bearer ${account.token}` } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) { throw Object.assign(new Error('Serveur injoignable. Vérifie ta connexion.'), { status: 0 }); }
+  const d = await r.json().catch(() => null);
+  if (!r.ok || !d) throw Object.assign(new Error((d && d.error) || 'Serveur injoignable.'), { status: d ? r.status : 0 });
+  return d;
+}
+// Les erreurs « serveur absent » (jeu ouvert en local, comptes pas encore activés) permettent de jouer hors ligne
+const serverDown = e => e.status === 0 || e.status === 404 || e.status === 503;
+function setAccount(user, token) {
+  account.user = user; account.token = token;
+  if (token) store.set(TOKEN_KEY, token); else store.del(TOKEN_KEY);
+}
+const localKey = () => (account.user ? `${SAVE_KEY}:${account.user.toLowerCase()}` : SAVE_KEY);
+
+let cloudTimer = null;
+function save() {
+  if (!G) return;
+  G.savedAt = Date.now();
+  store.set(localKey(), JSON.stringify(G));
+  if (account.user) { clearTimeout(cloudTimer); cloudTimer = setTimeout(pushCloud, 1200); }
+}
+async function pushCloud() {
+  clearTimeout(cloudTimer); cloudTimer = null;
+  if (!account.user || !G) return true;
+  try { await api('save', { body: { save: G } }); return true; }
+  catch (e) { console.warn('Sauvegarde en ligne impossible :', e.message); return false; }
+}
+// Dernière chance d'envoyer la partie quand on ferme l'onglet
+addEventListener('pagehide', () => {
+  if (!cloudTimer || !account.user || !G) return;
+  fetch('/api/save', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${account.token}` }, body: JSON.stringify({ save: G }) });
+});
+const validSave = s => !!(s && Array.isArray(s.team) && s.team.length && s.team.every(m => SPECIES[m.id]));
+function loadSave() {
+  try { const s = JSON.parse(store.get(localKey())); if (validSave(s)) return s; } catch (e) { /* ignore */ }
   return null;
+}
+// Garde la plus récente entre la sauvegarde en ligne et celle de cet appareil
+async function loadBestSave() {
+  const local = loadSave();
+  if (!account.user) return local;
+  const { save: cloud } = await api('save', { method: 'GET' });
+  if (!validSave(cloud)) return local;
+  return local && (local.savedAt || 0) > (cloud.savedAt || 0) ? local : cloud;
 }
 const healAll = () => G.team.forEach(m => { m.hp = stats(m).hp; });
 const markSeen = id => { G.seen[id] = 1; };
@@ -517,12 +568,42 @@ function chooseMon(title, ok, canBack = true) {
 function askName() {
   return new Promise(res => {
     bottom.innerHTML = `<form class="panel center" id="nameForm"><div class="mtitle">Comment t'appelles-tu ?</div>
-      <input id="nameIn" maxlength="10" placeholder="Lily" autocomplete="off" spellcheck="false">
+      <input id="nameIn" maxlength="10" placeholder="${esc(account.user || 'Lily')}" autocomplete="off" spellcheck="false">
       <button class="opt sel" type="submit">OK ▶</button></form>`;
     const f = $('#nameForm'), inp = $('#nameIn');
     setTimeout(() => inp.focus(), 50);
     f.addEventListener('click', e => e.stopPropagation());
-    f.onsubmit = e => { e.preventDefault(); const v = (inp.value.trim() || 'Lily').slice(0, 10); inp.blur(); sfx.blip(); res(v); };
+    f.onsubmit = e => { e.preventDefault(); const v = (inp.value.trim() || account.user || 'Lily').slice(0, 10); inp.blur(); sfx.blip(); res(v); };
+  });
+}
+
+function loginPanel() {
+  return new Promise(res => {
+    bottom.innerHTML = `<form class="panel login" id="loginForm">
+      <div class="mtitle">Compte joueur</div>
+      <input id="loginUser" maxlength="16" placeholder="Pseudo" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+      <input id="loginPass" type="password" maxlength="100" placeholder="Mot de passe (6+)" autocomplete="current-password" required>
+      <p class="err" id="loginErr"></p>
+      <div class="row2"><button class="opt sel" type="submit" value="login">Se connecter</button><button class="opt" type="submit" value="register">Créer un compte</button></div>
+      <button class="link" type="button" id="loginOffline">Jouer sans compte (sur cet appareil)</button>
+    </form>`;
+    const f = $('#loginForm'), u = $('#loginUser'), p = $('#loginPass'), err = $('#loginErr');
+    const busy = on => f.querySelectorAll('button').forEach(b => { b.disabled = on; });
+    f.addEventListener('click', e => e.stopPropagation());
+    setTimeout(() => u.focus(), 50);
+    $('#loginOffline').onclick = () => { sfx.blip(); res(null); };
+    f.onsubmit = async e => {
+      e.preventDefault();
+      const action = (e.submitter && e.submitter.value) || 'login';
+      err.textContent = action === 'register' ? 'Création du compte...' : 'Connexion...';
+      busy(true);
+      try {
+        const d = await api('auth', { body: { action, username: u.value.trim(), password: p.value } });
+        setAccount(d.username, d.token);
+        if (document.activeElement) document.activeElement.blur();
+        sfx.heal(); res(d.username);
+      } catch (ex) { err.textContent = ex.message; sfx.bump(); busy(false); }
+    };
   });
 }
 
@@ -540,7 +621,7 @@ function renderIdle() {
   } else if (topScene === 'world' && G) {
     const badge = G.flags.champ ? ' <span class="badge">★</span>' : '';
     bottom.innerHTML = `<div class="panel">
-      <div class="wtop"><span>${esc(G.name)}${badge}</span><span class="bag">Ball×${G.items.ball} · Potion×${G.items.potion}</span></div>
+      <div class="wtop"><span>${esc(G.name)}${badge}${account.user ? ' <small class="cloud" title="Sauvegarde en ligne">☁</small>' : ''}</span><span class="bag">Ball×${G.items.ball} · Potion×${G.items.potion}</span></div>
       <div class="wteam">${Array.from({ length: 6 }, (_, i) => {
         const m = G.team[i]; if (!m) return '<div class="wmon empty"></div>';
         const p = m.hp / stats(m).hp * 100;
@@ -671,11 +752,16 @@ function openMenu(which) {
     if (!which) which = await choose([
       { value: 'team', label: 'Équipe' }, { value: 'bag', label: 'Sac' },
       { value: 'dex', label: 'Dex' }, { value: 'save', label: 'Sauver' },
+      { value: 'title', label: 'Écran titre' },
     ], { cols: 2, title: 'Menu', back: 'back', cls: 'big' });
     if (which === 'team') await teamMenu();
     else if (which === 'bag') await bagMenu();
     else if (which === 'dex') await dexMenu();
-    else if (which === 'save') { save(); sfx.heal(); await say('Partie sauvegardée !'); }
+    else if (which === 'save') {
+      save();
+      const ok = await pushCloud(); sfx.heal();
+      await say(!account.user ? 'Partie sauvegardée sur cet appareil !' : ok ? 'Partie sauvegardée en ligne !' : 'Sauvegardée sur cet appareil, mais pas en ligne (connexion internet ?).');
+    } else if (which === 'title') { save(); await pushCloud(); await titleFlow(); }
   });
 }
 async function teamMenu() {
@@ -1142,11 +1228,30 @@ bottom.addEventListener('click', () => { if (dlg && !menu) dlgAdvance(); });
 
 // ---------- Début de partie ----------
 async function titleFlow() {
-  mode = 'event'; topScene = 'title';
-  const saved = loadSave();
+  mode = 'event'; topScene = 'title'; G = null; B = null;
+  // Reprend la session de cet appareil, et vérifie au passage que le serveur de comptes répond
+  if (!account.user && !account.offline) {
+    account.token = store.get(TOKEN_KEY);
+    try { const d = await api('auth', { body: { action: 'me' } }); setAccount(d.username, account.token); }
+    catch (e) { if (serverDown(e)) account.offline = true; setAccount(null, null); }
+  }
+  if (!account.user && !account.offline && !(await loginPanel())) account.offline = true;
+
+  let saved;
+  try { saved = await loadBestSave(); }
+  catch (e) {
+    if (e.status === 401) { setAccount(null, null); return titleFlow(); }
+    saved = loadSave();
+  }
   const opts = [{ value: 'new', label: 'Nouvelle partie' }];
   if (saved) opts.unshift({ value: 'cont', label: `Continuer (${saved.name})` });
-  let v = await choose(opts, { title: '★ LILY QUEST DS ★', cls: 'big' });
+  opts.push({ value: 'account', label: account.user ? `Se déconnecter (${account.user})` : 'Se connecter' });
+  const v = await choose(opts, { title: account.user ? `★ LILY QUEST DS ★ ☁ ${esc(account.user)}` : '★ LILY QUEST DS ★ · hors ligne', cls: 'big' });
+  if (v === 'account') {
+    if (account.user) { try { await api('auth', { body: { action: 'logout' } }); } catch (e) { /* déjà déconnecté */ } setAccount(null, null); }
+    account.offline = false;
+    return titleFlow();
+  }
   if (v === 'new' && saved) {
     const ok = await choose([{ value: false, label: 'Non' }, { value: true, label: 'Oui, effacer' }], { cols: 2, title: 'Effacer la sauvegarde ?', cls: 'big' });
     if (!ok) return titleFlow();
@@ -1154,7 +1259,7 @@ async function titleFlow() {
   if (v === 'cont') {
     G = saved;
     G.box ||= []; G.flags ||= {}; G.seen ||= {}; G.caught ||= {};
-    topScene = 'world'; renderIdle();
+    topScene = 'world'; save(); renderIdle();
     await say(`Bon retour, ${G.name} !`);
   } else await newGame();
   mode = 'world'; renderIdle();
