@@ -3,7 +3,7 @@
 Un petit RPG de capture de monstres façon console DS, jouable dans le navigateur (ordinateur et téléphone).
 
 - Deux écrans : le monde et les combats en haut, les menus tactiles en bas
-- 11 Monstres originaux, 7 types, évolutions au niveau 16
+- 12 Monstres originaux, 7 types, évolutions au niveau 16
 - Hautes herbes, captures, dresseurs, Centre de soin et un Champion à battre
 - Comptes joueurs (pseudo + mot de passe) : chacun a sa partie, sauvegardée en ligne
 - Mode « sans compte » : sauvegarde sur l'appareil uniquement
