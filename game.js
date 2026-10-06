@@ -427,6 +427,14 @@ const ROUTE_NPCS = [
     team: [['caillouton', 13], ['fantomi', 14], ['voltacelle', 14], ['pyrolion', 16]],
     intro: 'Tu as traversé toute la Route 1 ? Montre-moi ta force !', lose: 'Quelle puissance... Incroyable !', after: 'Reviens me voir quand tu veux, Champion·ne !',
     colors: { hair: '#2a2a3a', shirt: '#3a3a5a', pants: '#2a2a3a', skin: '#e8b890', cape: '#8a3ad0' } },
+  // Près de l'étang : il collectionne les tickets de caisse trouvés dans les poubelles
+  { id: 'gaston', x: 7, y: 13, dir: 'up', name: 'Gaston',
+    lines: [
+      'Gaston : Ouf... Je suis débordé ! Regarde-moi cette montagne de tickets de caisse !',
+      'Gaston : Chut... Je les récupère dans les poubelles du coin. Personne n\'en veut, alors je les prends !',
+      'Gaston : Si tu croises un Tickétou dans les herbes, ne lui dis surtout pas où je cache ma collection...',
+    ],
+    colors: { hat: '#7a5a3a', hair: '#8a8a8a', shirt: '#c8a848', pants: '#4a4a3a', skin: '#e8c0a0' } },
 ];
 // Les trois dresseuses de la grotte : elles papotent, pas de combat
 const CAVE_NPCS = [
@@ -452,7 +460,13 @@ const ITEMS = [
 ];
 const ITEM_NAMES = { potion: 'Potion', ball: 'Ball' };
 const itemAt = (x, y) => G && ITEMS.find(i => (i.map || 'route') === curMap && i.x === x && i.y === y && !G.flags[i.id]);
-const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y) && !itemAt(x, y);
+// Décors posés sur la carte (on ne peut pas marcher dessus)
+const DECOR = [
+  { kind: 'bin', x: 6, y: 13 },
+  { kind: 'pile', x: 8, y: 13 },
+];
+const decorAt = (x, y) => DECOR.find(d => (d.map || 'route') === curMap && d.x === x && d.y === y);
+const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y) && !itemAt(x, y) && !decorAt(x, y);
 
 const TIPS = [
   'Prof. Lilas : Affaiblis un Monstre avant de lancer une Ball, tu auras plus de chances !',
@@ -1081,6 +1095,8 @@ async function talk(n) {
       'Pétunia : Pétu ! Elle sautille joyeusement autour du Prof. Lilas.',
       'Pétunia : Piouuu... Elle frotte sa joue contre ta main.',
     ]));
+  } else if (n.lines) {
+    for (const line of n.lines) await say(line);
   } else await say(`${n.name} : ${n.after}`);
   n.dir = n.hdir;
 }
@@ -1477,6 +1493,10 @@ function drawWorld(g) {
   const ents = NPCS.map(n => ({ y: n.y, draw: n.pal
     ? () => drawPal(g, n, n.x * 16 - camX, n.y * 16 - camY)
     : () => drawPerson(g, n.x * 16 - camX, n.y * 16 - camY - 3, n.dir, 0, n.colors) }));
+  for (const d of DECOR) if ((d.map || 'route') === curMap) {
+    const x = d.x * 16 - camX, y = d.y * 16 - camY;
+    ents.push({ y: d.y, draw: () => (d.kind === 'pile' ? drawPile(g, x, y) : drawBin(g, x, y)) });
+  }
   const step = P.moving && P.t > 0.2 && P.t < 0.8 ? P.step : 0;
   ents.push({ y: py, draw: () => drawPerson(g, Math.round(px * 16) - camX, Math.round(py * 16) - camY - 3, G.dir, step, HERO) });
   ents.sort((a, b) => a.y - b.y).forEach(e => e.draw());
@@ -1500,6 +1520,26 @@ function drawWorld(g) {
     g.fillStyle = '#222'; g.fillRect(x - 1, y - 1, 12, 13); g.fillStyle = '#fff'; g.fillRect(x, y, 10, 11);
     txt(g, '!', x + 2, y + 2, '#e03848');
   }
+}
+// Montagne de tickets de caisse (déborde un peu au-dessus de sa case)
+function drawPile(g, x, y) {
+  const r = (a, b, w, h, c) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
+  r(0, 14, 16, 2, 'rgba(0,0,0,.22)');
+  const papers = [[0, 10, 7, 5], [8, 10, 8, 5], [4, 9, 7, 5], [1, 5, 6, 5], [9, 5, 6, 5], [4, 3, 8, 6], [5, -2, 5, 5], [6, -6, 4, 4]];
+  for (const [a, b, w, h] of papers) {
+    r(a, b, w, h, '#4a4458'); r(a + 1, b + 1, w - 2, h - 2, '#fbf8ee');
+    r(a + 2, b + 2, w - 4, 1, '#b9b6c6');
+  }
+  r(11, -3, 3, 4, '#4a4458'); r(12, -2, 1, 2, '#fbf8ee'); // un ticket qui s'envole
+}
+// Poubelle d'où dépasse un ticket
+function drawBin(g, x, y) {
+  const r = (a, b, w, h, c) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
+  r(2, 14, 12, 2, 'rgba(0,0,0,.22)');
+  r(5, -1, 4, 5, '#4a4458'); r(6, 0, 2, 3, '#fbf8ee');
+  r(3, 3, 10, 12, '#2a3a2a'); r(4, 4, 8, 10, '#5a8a5a');
+  r(6, 5, 1, 8, '#4a7a4a'); r(9, 5, 1, 8, '#4a7a4a');
+  r(2, 2, 12, 3, '#2a3a2a'); r(3, 3, 10, 1, '#7aaa7a');
 }
 function drawSparkle(g, x, y) {
   const r = (a, b, w, h, c) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
