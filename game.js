@@ -13,189 +13,31 @@ const approach = (a, b, s) => (a < b ? Math.min(b, a + s) : Math.max(b, a - s));
 const until = fn => new Promise(res => { const i = setInterval(() => { if (fn()) { clearInterval(i); res(); } }, 16); });
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// ---------- Son : bruitages et musique façon console ----------
-const SOUND_KEY = 'lilyquest-ds-sound';
+// ---------- Son (bips façon console) ----------
 let audio = null, soundOn = true;
-try { soundOn = localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) { /* stockage bloqué */ }
-// Les navigateurs bloquent le son tant qu'on n'a pas touché la page : on le débloque au premier geste
-function unlockAudio() {
+function beep(freq = 660, dur = 0.06, type = 'square', vol = 0.05, slide = 0) {
+  if (!soundOn) return;
   try {
     audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    if (audio.state === 'suspended') audio.resume();
-  } catch (e) { /* pas de son, tant pis */ }
-}
-['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlockAudio, true));
-// Petits outils de synthèse : une note (avec glissé ou vibrato) et un souffle de bruit filtré
-function tone(freq, start = 0, dur = 0.1, { type = 'square', vol = 0.05, to = null, vib = 0 } = {}) {
-  if (!soundOn || !audio) return;
-  try {
-    const t = audio.currentTime + start, o = audio.createOscillator(), g = audio.createGain();
+    const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
     o.type = type; o.frequency.setValueAtTime(freq, t);
-    if (to) o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
-    if (vib) {
-      const lfo = audio.createOscillator(), depth = audio.createGain();
-      lfo.frequency.value = vib; depth.gain.value = freq * 0.04;
-      lfo.connect(depth).connect(o.frequency); lfo.start(t); lfo.stop(t + dur);
-    }
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.02);
-  } catch (e) { /* pas de son, tant pis */ }
-}
-let noiseBuf = null;
-function noise(start = 0, dur = 0.1, { vol = 0.08, freq = 1000, to = null, q = 1, type = 'bandpass' } = {}) {
-  if (!soundOn || !audio) return;
-  try {
-    if (!noiseBuf) {
-      noiseBuf = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
-      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    const t = audio.currentTime + start, src = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
-    src.buffer = noiseBuf; src.loop = true;
-    f.type = type; f.frequency.setValueAtTime(freq, t); if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur); f.Q.value = q;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(audio.destination); src.start(t); src.stop(t + dur + 0.02);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur);
   } catch (e) { /* pas de son, tant pis */ }
 }
-const beep = (freq = 660, dur = 0.06, type = 'square', vol = 0.05, slide = 0) => tone(freq, 0, dur, { type, vol, to: slide ? freq + slide : null });
-// Petite mélodie (même notation que la musique) : la musique de fond se tait le temps du jingle, comme dans Pokémon
-let duckUntil = 0;
-function jingle(lead, bpm, bass = '', { type = 'square', vol = 0.05 } = {}) {
-  if (!soundOn || !audio) return 0;
-  const step = 60 / bpm / 2;
-  const play = (str, wave, v) => { let t = 0; for (const [f, d] of parseNotes(str)) { if (f) tone(f, t, d * step * 0.92, { type: wave, vol: v }); t += d * step; } return t; };
-  const len = Math.max(play(lead, type, vol), bass ? play(bass, 'triangle', 0.09) : 0);
-  duckUntil = Math.max(duckUntil, performance.now() + len * 1000 + 200);
-  return len * 1000;
-}
-// Cri du Monstre : toujours le même pour une espèce, plus grave pour les formes évoluées
-function cry(id, pitch = 1) {
-  let h = 7; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  const sp = SPECIES[id], base = (320 + (h % 480)) * pitch * (sp && sp.look && sp.look.big ? 0.7 : 1);
-  const wave = ['square', 'sawtooth', 'triangle'][h % 3];
-  tone(base, 0, 0.12, { type: wave, vol: 0.05, to: base * (1.3 + ((h >> 3) % 5) * 0.15) });
-  tone(base * 1.4, 0.1, 0.2, { type: wave, vol: 0.045, to: base * 0.6, vib: 18 + ((h >> 5) % 30) });
-  tone(base * 0.85, 0.28, 0.22, { type: 'square', vol: 0.035, to: base * 0.5 });
-}
+const tune = (notes, gap, dur, type = 'square', vol = 0.05) => notes.forEach((f, i) => setTimeout(() => beep(f, dur, type, vol), i * gap));
 const sfx = {
-  blip: () => tone(1320, 0, 0.04, { vol: 0.035 }),
-  menu: () => { tone(988, 0, 0.04, { vol: 0.04 }); tone(1480, 0.04, 0.06, { vol: 0.04 }); },
-  bump: () => tone(95, 0, 0.09, { vol: 0.07, to: 60 }),
-  grass: () => { noise(0, 0.13, { freq: 3500, q: 0.7, vol: 0.07, type: 'highpass' }); noise(0.06, 0.09, { freq: 5500, vol: 0.05, type: 'highpass' }); },
-  door: () => { noise(0, 0.12, { freq: 400, vol: 0.14, type: 'lowpass' }); tone(220, 0.06, 0.12, { type: 'triangle', vol: 0.07, to: 130 }); },
-  // Rencontre sauvage : tourbillon + souffle qui monte
-  encounter: () => { for (let i = 0; i < 12; i++) tone(1400 - i * 80, i * 0.03, 0.05, { vol: 0.04 }); noise(0, 0.55, { freq: 300, to: 5000, vol: 0.06 }); },
-  // Un dresseur te repère : « ! » puis petit thème
-  alert: () => { tone(1568, 0, 0.07, { vol: 0.06 }); tone(2093, 0.08, 0.16, { vol: 0.06 }); jingle('. . . E5 E5 G5 E5 A5*2 G5 E5*2', 230, '. . . A2*2 A2*2 C3*2 E3*2'); },
-  heal: () => jingle('C5 E5 G5 C6 . G5 C6*3 . E6*4', 190, 'C3*4 G3*4 C3*4 . . . .', { type: 'triangle', vol: 0.09 }),
-  potion: () => { [784, 988, 1175, 1568, 1976, 2349].forEach((f, i) => tone(f, i * 0.05, 0.12, { type: 'sine', vol: 0.06 })); },
-  item: () => jingle('G5 G5 G5 C6*2 . E6*4', 210, 'C3*2 C3*2 E3*2 G3*4', { vol: 0.05 }),
-  save: () => jingle('E5 G5 C6*2', 260, '', { type: 'triangle', vol: 0.07 }),
-  level: () => jingle('C5 E5 G5 C6 E6*2 C6*3', 230, 'C3*2 G3*2 C4*5', { vol: 0.05 }),
-  learn: () => jingle('G5 A5 B5 D6*3', 260, '', { vol: 0.045 }),
-  // Attaques : un son par type
-  attack: type => {
-    switch (type) {
-      case 'Feu': noise(0, 0.45, { freq: 500, to: 3000, q: 0.6, vol: 0.13, type: 'lowpass' }); for (let i = 0; i < 6; i++) noise(i * 0.07, 0.04, { freq: 3500, vol: 0.07, type: 'highpass' }); break;
-      case 'Eau': for (let i = 0; i < 7; i++) { const f = 400 + Math.random() * 500; tone(f, i * 0.055, 0.08, { type: 'sine', vol: 0.09, to: f * 2.4 }); } break;
-      case 'Plante': noise(0, 0.18, { freq: 4500, to: 700, q: 2, vol: 0.12 }); tone(1400, 0, 0.16, { type: 'triangle', vol: 0.06, to: 300 }); break;
-      case 'Élec': tone(90, 0, 0.4, { type: 'sawtooth', vol: 0.08, vib: 45 }); for (let i = 0; i < 7; i++) tone(1500 + Math.random() * 1800, i * 0.05, 0.04, { vol: 0.04 }); break;
-      case 'Roche': for (let i = 0; i < 3; i++) noise(i * 0.1, 0.16, { freq: 220, vol: 0.2, type: 'lowpass' }); tone(130, 0, 0.32, { type: 'triangle', vol: 0.11, to: 50 }); break;
-      case 'Spectre': tone(300, 0, 0.55, { type: 'sine', vol: 0.09, to: 900, vib: 7 }); tone(306, 0, 0.55, { type: 'sine', vol: 0.06, to: 860, vib: 5 }); break;
-      default: noise(0, 0.22, { freq: 500, to: 3500, q: 1.5, vol: 0.13 });
-    }
-  },
-  // Impact : plus fort si c'est super efficace
-  hit: (e = 1) => {
-    const v = e > 1 ? 0.22 : e < 1 ? 0.07 : 0.14;
-    noise(0, e > 1 ? 0.32 : 0.18, { freq: e > 1 ? 1600 : 900, to: 150, vol: v, type: 'lowpass' });
-    tone(e > 1 ? 240 : 170, 0, 0.15, { vol: v * 0.4, to: 60 });
-    if (e > 1) tone(1320, 0.06, 0.12, { vol: 0.04, to: 660 });
-  },
-  miss: () => noise(0, 0.25, { freq: 3000, to: 600, vol: 0.06 }),
-  faint: () => tone(700, 0.35, 0.65, { vol: 0.05, to: 70 }),
-  pop: () => { noise(0, 0.08, { freq: 2500, vol: 0.08 }); tone(500, 0, 0.12, { type: 'triangle', vol: 0.07, to: 1200 }); },
-  throw: () => { noise(0, 0.3, { freq: 700, to: 4500, vol: 0.07 }); tone(380, 0, 0.3, { type: 'triangle', vol: 0.04, to: 1300 }); },
-  absorb: () => tone(1500, 0, 0.25, { type: 'sine', vol: 0.07, to: 180 }),
-  shake: () => { tone(260, 0, 0.06, { vol: 0.06 }); noise(0, 0.05, { freq: 1500, vol: 0.07 }); },
-  breakout: () => { tone(300, 0, 0.16, { vol: 0.06, to: 1300 }); noise(0, 0.16, { freq: 2200, vol: 0.09 }); },
-  catch: () => jingle('C5 C5 C5 . E5 G5 . E5 G5*4', 250, 'C3*2 C3*2 G2*2 C3*4', { vol: 0.05 }),
-  run: () => { noise(0, 0.35, { freq: 4500, to: 300, vol: 0.08 }); tone(900, 0, 0.3, { vol: 0.03, to: 200 }); },
-  winWild: () => jingle('G5 C6 E6 G6*3 E6 G6*4', 240, 'C3*2 E3*2 G3*2 C4*6', { vol: 0.045 }),
-  victory: () => jingle('G5 G5 G5 G5*2 E5*2 F5*2 G5*2 . F5 G5*6', 200, 'C3*2 C3*2 C3*2 C3*2 A2*2 A2*2 B2*2 B2*2 C3*6', { vol: 0.05 }),
-  evolved: () => jingle('C5 E5 G5 C6 . G5 C6 E6*2 G6*6', 210, 'C3*4 G2*4 C3*8', { vol: 0.05 }),
-  lowHp: () => { tone(1175, 0, 0.08, { vol: 0.022 }); tone(988, 0.11, 0.08, { vol: 0.022 }); },
+  blip: () => beep(880, 0.05),
+  hit: () => beep(220, 0.18, 'sawtooth', 0.08, -150),
+  bump: () => beep(110, 0.06, 'square', 0.04),
+  heal: () => tune([523, 659, 784, 1046], 110, 0.12, 'triangle', 0.08),
+  level: () => tune([523, 659, 784, 659, 1046], 90, 0.1),
+  catch: () => tune([784, 988, 1175, 1568], 140, 0.15, 'triangle', 0.08),
+  encounter: () => tune([440, 415, 440, 415, 440, 523, 587], 70, 0.07),
+  shake: () => beep(300, 0.08, 'triangle', 0.07),
+  alert: () => tune([988, 1319], 80, 0.08),
 };
-
-// Musique : mélodies originales. Notes en croches ; « E5*2 » = 2 croches, « . » = silence, « | » = barre de mesure.
-const SONGS = {
-  title: { bpm: 100, ch: [
-    { wave: 'square', vol: 0.03, notes: 'C5 E5 G5 C6*4 G5 | A5*2 F5*2 C6*4 | B5 A5 G5 F5 E5*2 D5 E5 | G5*8 | E5 G5 C6 E6*4 D6 | C6*2 A5*2 F5*4 | G5 A5 B5 D6 C6*2 B5 G5 | C6*8' },
-    { wave: 'triangle', vol: 0.07, notes: 'C3*4 E3*4 | F2*4 A2*4 | G2*4 B2*4 | C3*4 G2*4 | C3*4 E3*4 | F2*4 A2*4 | G2*4 G3*4 | C3*4 C2*4' },
-  ] },
-  world: { bpm: 126, ch: [
-    { wave: 'square', vol: 0.028, notes: 'E5 G5 C6*2 B5 G5 E5*2 | F5 A5 C6*2 B5 A5 G5*2 | E5 G5 C6 E6 D6*2 C6 B5 | A5*2 G5*2 . G5 A5 B5 | C6*2 A5 F5 E5*2 D5 C5 | F5 A5 C6*2 A5 G5 F5 E5 | D5 E5 F5 A5 G5*2 E5 C5 | D5*4 . G4 A4 B4' },
-    { wave: 'triangle', vol: 0.07, notes: 'C3*2 G3*2 C3*2 G3*2 | F2*2 C3*2 F2*2 C3*2 | C3*2 G3*2 C3*2 G3*2 | G2*2 D3*2 G2*2 D3*2 | A2*2 E3*2 A2*2 E3*2 | F2*2 C3*2 F2*2 C3*2 | D3*2 A3*2 G2*2 D3*2 | G2*2 D3*2 G2*2 B2*2' },
-  ] },
-  battle: { bpm: 152, ch: [
-    { wave: 'square', vol: 0.03, notes: 'A4 A4 C5 A4 D5 A4 E5 D5 | C5 A4 C5 E5 G5*2 F5 E5 | F5 F5 E5 D5 E5*2 C5 A4 | B4 C5 D5 B4 E5*4 | A5 A5 G5 E5 G5 A5*2 E5 | F5 E5 D5 C5 D5*2 E5 F5 | E5 D5 C5 B4 C5*2 A4 B4 | G#4*2 B4*2 E5*2 . .' },
-    { wave: 'triangle', vol: 0.08, notes: 'A2 A3 A2 A3 A2 A3 A2 A3 | A2 A3 A2 A3 C3 C4 C3 C4 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3 | A2 A3 A2 A3 A2 A3 A2 A3 | D2 D3 D2 D3 D2 D3 D2 D3 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3' },
-  ] },
-};
-const noteFreq = n => {
-  const m = /^([A-G])(#?)(\d)$/.exec(n);
-  const midi = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] ? 1 : 0) + (+m[3] + 1) * 12;
-  return 440 * Math.pow(2, (midi - 69) / 12);
-};
-const parseNotes = str => str.split(/\s+/).filter(t => t && t !== '|').map(t => {
-  const [n, mult] = t.split('*');
-  return [n === '.' ? null : noteFreq(n), +(mult || 1)];
-});
-const music = { want: null, playing: null };
-function startMusic(name) {
-  const song = SONGS[name], step = 60 / song.bpm / 2;
-  const chans = song.ch.map(c => ({ ...c, seq: parseNotes(c.notes), i: 0 }));
-  chans.forEach(c => { c.len = c.seq.reduce((a, n) => a + n[1], 0); });
-  const len = Math.max(...chans.map(c => c.len));
-  const out = audio.createGain(); out.connect(audio.destination);
-  const t0 = audio.currentTime + 0.08;
-  chans.forEach(c => { c.at = t0; });
-  const p = { name, step, chans, len, out };
-  p.timer = setInterval(() => scheduleMusic(p), 60);
-  music.playing = p; scheduleMusic(p);
-}
-function scheduleMusic(p) {
-  const horizon = audio.currentTime + 0.3;
-  for (const c of p.chans) {
-    while (c.at < horizon) {
-      const [f, d] = c.seq[c.i], dur = d * p.step;
-      if (f) {
-        const o = audio.createOscillator(), g = audio.createGain();
-        o.type = c.wave; o.frequency.value = f;
-        g.gain.setValueAtTime(c.vol, c.at); g.gain.setValueAtTime(c.vol, c.at + dur * 0.7);
-        g.gain.exponentialRampToValueAtTime(0.0001, c.at + dur * 0.95);
-        o.connect(g).connect(p.out); o.start(c.at); o.stop(c.at + dur);
-      }
-      c.at += dur;
-      if (++c.i >= c.seq.length) { c.i = 0; c.at += (p.len - c.len) * p.step; }
-    }
-  }
-}
-function stopMusic() {
-  const p = music.playing; if (!p) return;
-  clearInterval(p.timer);
-  try { p.out.gain.setTargetAtTime(0, audio.currentTime, 0.04); setTimeout(() => p.out.disconnect(), 400); } catch (e) { /* déjà arrêté */ }
-  music.playing = null;
-}
-// Appelée à chaque image : lance, change ou coupe la musique selon l'écran et le réglage du son
-function updateMusic(name) {
-  music.want = name;
-  const running = soundOn && audio && audio.state === 'running';
-  const cur = music.playing && music.playing.name;
-  if (!running || !name) { if (cur) stopMusic(); return; }
-  if (cur !== name) { stopMusic(); startMusic(name); }
-  const p = music.playing, ducked = performance.now() < duckUntil;
-  if (p && ducked !== !!p.ducked) { p.ducked = ducked; p.out.gain.setTargetAtTime(ducked ? 0 : 1, audio.currentTime, ducked ? 0.03 : 0.25); }
-}
 
 // ---------- Données : types, attaques, espèces ----------
 const TYPES = { Feu: '#f08030', Eau: '#4a90e8', Plante: '#58b848', Normal: '#9a9a78', 'Élec': '#e8b820', Roche: '#b09040', Spectre: '#7058a8' };
@@ -232,7 +74,6 @@ const MOVES = {
   lechouille: { name: 'Léchouille', type: 'Spectre', pow: 30, acc: 100 },
   ombre: { name: 'Ombre', type: 'Spectre', pow: 50, acc: 100 },
   cauchemar: { name: 'Cauchemar', type: 'Spectre', pow: 80, acc: 95 },
-  papier: { name: 'Coupure Papier', type: 'Normal', pow: 50, acc: 100 },
 };
 
 // base : [PV, Attaque, Défense, Vitesse]
@@ -281,12 +122,12 @@ const SPECIES = {
     learn: [[1, 'lechouille'], [6, 'ombre'], [16, 'cauchemar']],
     desc: 'Il se cache dans les herbes la nuit pour faire « Bouh ! ».',
     look: { shape: 'ghost', c1: '#9a7ad8', c2: '#c8b0f0', outline: '#2a1640', mouth: false } },
-  ticketou: { name: 'Tickétou', type: 'Normal', base: [44, 50, 42, 70], rate: 0.45,
-    learn: [[1, 'charge'], [1, 'papier'], [9, 'morsure'], [15, 'ruee']],
-    desc: 'Un ticket de caisse échappé d\'un magasin. Il imprime ses humeurs sur son ventre.',
-    look: { shape: 'receipt', c1: '#fbf8ee', c2: '#b9b6c6', c3: '#e2ddca' } },
 };
 const DEX = Object.keys(SPECIES);
+// Monstres compagnons des personnages (ni capturables, ni dans le Monstredex)
+const PALS = {
+  petunia: { name: 'Pétunia', look: { shape: 'fairy', c1: '#e0218a', c2: '#ffc8e6', c3: '#ff8ac8', outline: '#5a0a3a' } },
+};
 
 // ---------- Monstres ----------
 const xpFor = l => l * l * l;
@@ -347,6 +188,7 @@ const SIGNS = { '26,9': 'Route 1 — Attention ! Des Monstres sauvages se cachen
 const NPCS = [
   { id: 'prof', x: 10, y: 23, dir: 'down', name: 'Prof. Lilas',
     colors: { hair: '#d8d8e0', shirt: '#ffffff', pants: '#5a5f78', skin: '#f2c8a0' } },
+  { id: 'petunia', x: 11, y: 23, dir: 'down', name: 'Pétunia', pal: 'petunia' },
   { id: 't1', x: 13, y: 13, dir: 'right', name: 'Gamin Léo', trainer: true, team: [['ratounet', 4], ['piouli', 5]],
     intro: 'Hé ! Nos regards se sont croisés : combat !', lose: 'Oh non, mes Monstres...', after: 'Je vais m\'entraîner encore plus fort !',
     colors: { hat: '#3a9a4a', hair: '#5a3a2a', shirt: '#f0c040', pants: '#3a5a9a', skin: '#f2c8a0' } },
@@ -360,13 +202,7 @@ const NPCS = [
 ];
 NPCS.forEach(n => { n.hx = n.x; n.hy = n.y; n.hdir = n.dir; });
 const npcAt = (x, y) => NPCS.find(n => n.x === x && n.y === y);
-// Objets cachés : une étincelle à ramasser avec A (une seule fois par partie)
-const ITEMS = [
-  { id: 'spark1', x: 11, y: 16, item: 'potion', qty: 1 },
-];
-const ITEM_NAMES = { potion: 'Potion', ball: 'Ball' };
-const itemAt = (x, y) => G && ITEMS.find(i => i.x === x && i.y === y && !G.flags[i.id]);
-const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y) && !itemAt(x, y);
+const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y);
 
 const TIPS = [
   'Prof. Lilas : Affaiblis un Monstre avant de lancer une Ball, tu auras plus de chances !',
@@ -457,6 +293,20 @@ function drawCreature(g, L) {
       E(13, 31, 3, 2, L.c3); E(28, 23, 3, 2, L.c3); E(24, 33, 2, 1.5, L.c3);
       L.eyes = [[15, 20], [23, 20]];
       break;
+    case 'fairy': {
+      const c3 = L.c3;
+      E(8, 21, 6, 4, '#ffd6f0', 0.5); E(32, 21, 6, 4, '#ffd6f0', -0.5);
+      P([26, 33, 33, 34, 35, 29, 33, 30, 27, 31], c1);
+      E(34.5, 26, 1.8, 1.8, c3); E(37, 26, 1.8, 1.8, c3); P([33, 26.5, 38.5, 26.5, 35.8, 30], c3);
+      E(20, 30, 9, 7, c1); E(20, 31, 5, 5, c2); E(15, 37, 3, 2, c1); E(25, 37, 3, 2, c1);
+      P([10, 15, 9, 4, 17, 10], c1); P([30, 15, 31, 4, 23, 10], c1);
+      P([11, 12, 11, 7, 15, 10], c3); P([29, 12, 29, 7, 25, 10], c3);
+      E(20, 18, 11, 9, c1); E(21, 8, 3, 3, c1); E(23, 6, 2, 2, c1);
+      E(13, 22, 2, 1.2, c3); E(27, 22, 2, 1.2, c3);
+      E(18.6, 12, 1.7, 1.7, c2); E(21.4, 12, 1.7, 1.7, c2); P([17, 12.5, 23, 12.5, 20, 16], c2);
+      L.eyes = [[15, 17], [23, 17]];
+      break;
+    }
     case 'ghost':
       E(20, 17, 12, 12, c1); P([8, 17, 32, 17, 32, 30, 8, 30], c1);
       P([8, 29, 8, 37, 12, 33, 16, 38, 20, 33, 24, 38, 28, 33, 32, 37, 32, 29], c1);
@@ -464,18 +314,6 @@ function drawCreature(g, L) {
       E(20, 24, 3.5, 2.5, '#3a1a4a'); E(20, 25.5, 2, 1, '#ff7aa8');
       L.eyes = [[14, 15], [23, 15]]; L.eyeH = 4;
       break;
-    case 'receipt': {
-      E(8, 21, 3, 2, c1, -0.4); E(32, 21, 3, 2, c1, 0.4);
-      const pts = [11, 5, 29, 5, 29, 34];
-      for (let x = 29; x > 11; x -= 3) pts.push(x - 1.5, 37, x - 3, 34);
-      P(pts, c1);
-      E(20, 5, 9.5, 2, L.c3);
-      E(13, 17, 1.8, 1.1, '#ffb6c8'); E(27, 17, 1.8, 1.1, '#ffb6c8');
-      g.fillStyle = c2; g.fillRect(14, 22, 12, 1); g.fillRect(14, 25, 8, 1); g.fillRect(24, 25, 2, 1);
-      g.fillStyle = '#6a6678'; g.fillRect(14, 29, 12, 1);
-      L.eyes = [[15, 11], [23, 11]];
-      break;
-    }
   }
 }
 function pixelize(g, outline) {
@@ -492,7 +330,7 @@ function pixelize(g, outline) {
 }
 function sprite(id) {
   if (spriteCache[id]) return spriteCache[id];
-  const [c, g] = newCanvas(S, S), L = { ...SPECIES[id].look };
+  const [c, g] = newCanvas(S, S), L = { ...(SPECIES[id] || PALS[id]).look };
   drawCreature(g, L);
   pixelize(g, L.outline || '#20182a');
   const eh = L.eyeH || 3;
@@ -802,7 +640,7 @@ function renderIdle() {
   } else if (topScene === 'world' && G) {
     const badge = G.flags.champ ? ' <span class="badge">★</span>' : '';
     bottom.innerHTML = `<div class="panel">
-      <div class="wtop"><span>${esc(G.name)}${badge}${account.user ? ' <small class="cloud" title="Sauvegarde en ligne">☁</small>' : ''}</span><span class="bag">Ball×${G.items.ball} · Potion×${G.items.potion} <button class="snd" data-snd>${soundOn ? '♪ ON' : '♪ OFF'}</button></span></div>
+      <div class="wtop"><span>${esc(G.name)}${badge}${account.user ? ' <small class="cloud" title="Sauvegarde en ligne">☁</small>' : ''}</span><span class="bag">Ball×${G.items.ball} · Potion×${G.items.potion}</span></div>
       <div class="wteam">${Array.from({ length: 6 }, (_, i) => {
         const m = G.team[i]; if (!m) return '<div class="wmon empty"></div>';
         const p = m.hp / stats(m).hp * 100;
@@ -814,7 +652,6 @@ function renderIdle() {
       </div>
       <p class="hint" style="text-align:center">▼ Appuie sur A</p></div>`;
     bottom.querySelectorAll('[data-w]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); openMenu(b.dataset.w); }));
-    bottom.querySelector('[data-snd]').addEventListener('click', e => { e.stopPropagation(); toggleSound(); });
   } else {
     bottom.innerHTML = `<div class="panel center"><p class="hint">▼ Appuie sur A</p></div>`;
   }
@@ -839,7 +676,7 @@ function sees(n) {
   }
   return false;
 }
-function stepTo(x, y) { if (tileAt(x, y) === ',') sfx.grass(); P.fx = G.x; P.fy = G.y; G.x = x; G.y = y; P.moving = true; P.t = 0; P.step = P.step === 1 ? 2 : 1; }
+function stepTo(x, y) { P.fx = G.x; P.fy = G.y; G.x = x; G.y = y; P.moving = true; P.t = 0; P.step = P.step === 1 ? 2 : 1; }
 function onStep() {
   const ch = tileAt(G.x, G.y);
   if (ch === 'P' || ch === 'D') return runEvent(() => healEvent(ch));
@@ -865,41 +702,38 @@ function interact() {
   const [dx, dy] = DIRS[G.dir], tx = G.x + dx, ty = G.y + dy;
   const n = npcAt(tx, ty);
   if (n) return runEvent(() => talk(n));
-  const it = itemAt(tx, ty);
-  if (it) return runEvent(() => pickUp(it));
   const ch = tileAt(tx, ty);
   if (ch === 'S') return runEvent(() => say(SIGNS[`${tx},${ty}`] || '...'));
   if (ch === 'X') return runEvent(() => say(G.flags.champ ? 'L\'Arène. Ton portrait de Champion·ne est accroché à l\'entrée !' : 'Arène de la région. Le Champion Orion en garde l\'entrée.'));
-}
-async function pickUp(it) {
-  G.flags[it.id] = 1;
-  G.items[it.item] = (G.items[it.item] || 0) + it.qty;
-  sfx.item(); save(); renderIdle();
-  await say(`Tu ramasses l'étincelle... Tu as trouvé ${it.qty > 1 ? it.qty + ' ' : 'une '}${ITEM_NAMES[it.item]} !`);
 }
 async function talk(n) {
   n.dir = OPP[G.dir];
   if (n.trainer && !G.flags[n.id]) return trainerBattle(n);
   if (n.id === 'prof') {
     if (!G.flags.gift) {
-      G.flags.gift = 1; G.items.ball += 5; sfx.item();
+      G.flags.gift = 1; G.items.ball += 5; sfx.catch();
       await say('Prof. Lilas : Tiens, prends ces 5 Balls ! Affaiblis un Monstre sauvage, puis lance une Ball dans le Sac.');
     } else if (G.flags.champ) await say(`Prof. Lilas : ${G.name}, Champion·ne de la région ! Je suis si fier·e de toi !`);
     else await say(pick(TIPS));
+  } else if (n.pal) {
+    sfx.alert();
+    await say(G.flags.champ ? 'Pétunia : Piouu ! Elle tourne autour de toi, toute fière !' : pick([
+      'Pétunia : Piou piou ! Elle te fait un grand sourire.',
+      'Pétunia : Pétu ! Elle sautille joyeusement autour du Prof. Lilas.',
+      'Pétunia : Piouuu... Elle frotte sa joue contre ta main.',
+    ]));
   } else await say(`${n.name} : ${n.after}`);
   n.dir = n.hdir;
 }
 async function healEvent(ch) {
   if (ch === 'P') {
-    sfx.door();
     await say('Bienvenue au Centre Monstre ! Je soigne tes Monstres...');
-    healAll(); await wait(sfx.heal() + 150);
+    healAll(); sfx.heal(); await wait(700);
     if (G.items.ball < 5) { G.items.ball = 5; await say('Voilà, ils sont en pleine forme ! Et tiens : ton stock de Balls est rempli.'); }
     else await say('Voilà, ils sont en pleine forme ! À bientôt !');
   } else {
-    sfx.door();
     await say(`Maman : ${G.name} ! Tu as l'air épuisé·e. Repose-toi un peu...`);
-    healAll(); await wait(sfx.heal() + 150);
+    healAll(); sfx.heal(); await wait(700);
     await say('Maman : Voilà, toute l\'équipe est en forme. Bonne route !');
   }
   save();
@@ -908,7 +742,7 @@ async function healEvent(ch) {
 function wildFor(x, y) {
   if (y <= 7) return [pick(['fantomi', 'fantomi', 'voltacelle', 'caillouton', 'piouli', 'ratounet']), rand(11, 15)];
   if (y >= 14) return [pick(['ratounet', 'ratounet', 'piouli', 'piouli', 'caillouton', 'feuillon']), rand(2, 4)];
-  return [pick(['ratounet', 'piouli', 'voltacelle', 'caillouton', 'voltacelle', 'aquapin', 'flamiaou', 'feuillon', 'ticketou', 'ticketou']), rand(4, 8)];
+  return [pick(['ratounet', 'piouli', 'voltacelle', 'caillouton', 'voltacelle', 'aquapin', 'flamiaou', 'feuillon']), rand(4, 8)];
 }
 async function wildBattle() {
   const [id, l] = wildFor(G.x, G.y);
@@ -929,7 +763,7 @@ async function trainerBattle(n) {
   }
 }
 async function ending() {
-  sfx.victory();
+  sfx.level();
   await say('Orion : Tu es le ou la nouvel·le Champion·ne de la région !');
   await say(`★ FÉLICITATIONS, ${G.name} ! ★`);
   const caught = Object.keys(G.caught).length;
@@ -941,7 +775,6 @@ async function ending() {
 function openMenu(which) {
   if (mode !== 'world' || P.moving) return;
   runEvent(async () => {
-    if (!which) sfx.menu();
     if (!which) which = await choose([
       { value: 'team', label: 'Équipe' }, { value: 'bag', label: 'Sac' },
       { value: 'dex', label: 'Dex' }, { value: 'save', label: 'Sauver' },
@@ -952,7 +785,7 @@ function openMenu(which) {
     else if (which === 'dex') await dexMenu();
     else if (which === 'save') {
       save();
-      const ok = await pushCloud(); sfx.save();
+      const ok = await pushCloud(); sfx.heal();
       await say(!account.user ? 'Partie sauvegardée sur cet appareil !' : ok ? 'Partie sauvegardée en ligne !' : 'Sauvegardée sur cet appareil, mais pas en ligne (connexion internet ?).');
     } else if (which === 'title') { save(); await pushCloud(); await titleFlow(); }
   });
@@ -984,7 +817,7 @@ async function bagMenu() {
     const i = await chooseMon('Soigner qui ?', m => m.hp > 0 && m.hp < stats(m).hp);
     if (i === 'back') continue;
     const m = G.team[i], before = m.hp;
-    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.potion();
+    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.heal();
     await say(`${nm(m)} récupère ${m.hp - before} PV !`);
   }
 }
@@ -1018,7 +851,7 @@ async function lunge(side) {
 }
 async function blink(side) { for (let i = 0; i < 6; i++) { B[side].vis = !B[side].vis; await wait(70); } B[side].vis = true; }
 async function faint(side) {
-  cry(side === 'e' ? B.enemy.id : G.team[B.mi].id, 0.8); sfx.faint(); await wait(350);
+  beep(400, 0.4, 'square', 0.05, -320);
   const s = B[side]; for (let i = 0; i < 20; i++) { s.dy += 3; s.alpha -= 0.05; await wait(20); }
   s.vis = false;
 }
@@ -1034,7 +867,6 @@ async function battle(enemyTeam, trainer) {
   markSeen(B.enemy.id);
   renderIdle();
   await slide('e', 180, 0, 450);
-  cry(B.enemy.id);
   await say(trainer ? `${trainer.name} veut se battre !` : `Un ${nm(B.enemy)} sauvage apparaît !`);
   if (trainer) await say(`${trainer.name} envoie ${nm(B.enemy)} !`);
   await sendOut(B.mi);
@@ -1061,7 +893,7 @@ async function battle(enemyTeam, trainer) {
 async function sendOut(i) {
   B.mi = i; B.dispM = G.team[i].hp; B.showM = true;
   renderIdle();
-  sfx.pop(); popIn('m'); setTimeout(() => cry(G.team[i].id), 250);
+  popIn('m'); beep(520, 0.1, 'triangle', 0.07, 300);
   await say(`Go, ${nm(G.team[i])} !`);
 }
 async function battleTurn() {
@@ -1087,7 +919,7 @@ async function battleTurn() {
     const i = await chooseMon('Soigner qui ?', m => m.hp > 0 && m.hp < stats(m).hp);
     if (i === 'back') return null;
     const m = G.team[i], before = m.hp;
-    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.potion();
+    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.heal();
     if (i === B.mi) await until(hpSynced);
     await say(`${nm(m)} récupère ${m.hp - before} PV !`);
     return enemyAct();
@@ -1102,7 +934,7 @@ async function battleTurn() {
   }
   // Fuite
   if (B.trainer) { await say('Impossible de fuir un duel de dresseur !'); return null; }
-  if (Math.random() < (stats(me).spd >= stats(B.enemy).spd ? 0.9 : 0.55)) { sfx.run(); await say('Tu prends la fuite !'); return 'run'; }
+  if (Math.random() < (stats(me).spd >= stats(B.enemy).spd ? 0.9 : 0.55)) { beep(600, 0.2, 'square', 0.05, -400); await say('Tu prends la fuite !'); return 'run'; }
   await say('Impossible de fuir !');
   return enemyAct();
 }
@@ -1116,16 +948,14 @@ async function attack(side, id) {
   const A = side === 'm' ? G.team[B.mi] : B.enemy, D = side === 'm' ? B.enemy : G.team[B.mi], mv = MOVES[id];
   const label = side === 'e' ? `${nm(A)} ${B.trainer ? 'adverse' : 'sauvage'}` : nm(A);
   await say(`${label} utilise ${mv.name} !`);
-  if (Math.random() * 100 >= mv.acc) { sfx.miss(); await say('Mais l\'attaque échoue !'); return false; }
-  sfx.attack(mv.type);
+  if (Math.random() * 100 >= mv.acc) { await say('Mais l\'attaque échoue !'); return false; }
   await lunge(side);
-  await wait(mv.type === 'Spectre' || mv.type === 'Feu' ? 250 : 120);
   const e = eff(mv.type, SPECIES[D.id].type);
   if (e === 0) { await say(`Ça n'affecte pas ${nm(D)}...`); return false; }
   const sa = stats(A), sd = stats(D), crit = Math.random() < 1 / 16;
   let dmg = Math.floor(((2 * A.lvl / 5 + 2) * mv.pow * sa.atk / sd.def) / 50 + 2);
   dmg = Math.max(1, Math.floor(dmg * (mv.type === SPECIES[A.id].type ? 1.5 : 1) * e * (crit ? 1.5 : 1) * (0.85 + Math.random() * 0.15)));
-  sfx.hit(e); await blink(side === 'm' ? 'e' : 'm');
+  sfx.hit(); await blink(side === 'm' ? 'e' : 'm');
   D.hp = Math.max(0, D.hp - dmg);
   await until(hpSynced);
   if (crit) await say('Coup critique !');
@@ -1153,8 +983,6 @@ async function enemyFainted() {
   await say(`${nm(en)} ${B.trainer ? 'adverse' : 'sauvage'} est K.O. !`);
   const sum = SPECIES[en.id].base.reduce((a, b) => a + b, 0);
   const gain = Math.floor((30 + sum / 6) * en.lvl / 4 * (B.trainer ? 1.5 : 1));
-  const last = !B.trainer || B.ei + 1 >= B.enemyTeam.length;
-  if (last) await wait(B.trainer ? sfx.victory() : sfx.winWild());
   await giveXp(G.team[B.mi], gain);
   B.ei++;
   if (B.trainer && B.ei < B.enemyTeam.length) {
@@ -1162,7 +990,6 @@ async function enemyFainted() {
     Object.assign(B.e, { vis: true, alpha: 1, dy: 0, scale: 1 });
     renderIdle();
     await slide('e', 180, 0, 350);
-    cry(B.enemy.id);
     await say(`${B.trainer.name} envoie ${nm(B.enemy)} !`);
     return null;
   }
@@ -1191,7 +1018,7 @@ async function giveXp(m, x) {
 }
 async function learnMove(m, mv) {
   if (m.moves.includes(mv)) return;
-  if (m.moves.length < 4) { m.moves.push(mv); sfx.learn(); return say(`${nm(m)} apprend ${MOVES[mv].name} !`); }
+  if (m.moves.length < 4) { m.moves.push(mv); sfx.level(); return say(`${nm(m)} apprend ${MOVES[mv].name} !`); }
   await say(`${nm(m)} veut apprendre ${MOVES[mv].name}, mais connaît déjà 4 attaques.`);
   const c = await choose([...m.moves.map((id, i) => ({ value: i, html: moveHtml(id), cls: 'mv' })), { value: -1, label: 'Ne pas apprendre' }],
     { cols: 2, title: 'Oublier quelle attaque ?' });
@@ -1201,14 +1028,14 @@ async function learnMove(m, mv) {
 }
 async function throwBall() {
   const en = B.enemy;
-  sfx.throw();
+  beep(700, 0.15, 'triangle', 0.06, 400);
   const from = [50, 120], to = [192, 40];
   B.ball = { x: from[0], y: from[1], rot: 0 };
   for (let i = 1; i <= 26; i++) {
     const t = i / 26; B.ball.x = from[0] + (to[0] - from[0]) * t; B.ball.y = from[1] + (to[1] - from[1]) * t - Math.sin(t * Math.PI) * 50; B.ball.rot = t * 12;
     await wait(16);
   }
-  B.e.white = true; sfx.absorb(); await wait(120);
+  B.e.white = true; await wait(120);
   for (let i = 1; i <= 8; i++) { B.e.scale = 1 - i / 8; await wait(20); }
   B.e.vis = false; B.e.white = false;
   for (let i = 1; i <= 10; i++) { B.ball.y = 40 + i * 2.6; await wait(20); }
@@ -1218,7 +1045,7 @@ async function throwBall() {
   for (let k = 0; k < 3; k++) {
     await wait(450);
     if (Math.random() > pass) {
-      sfx.breakout();
+      beep(200, 0.2, 'square', 0.06, 300);
       B.ball = null; B.e.vis = true; B.e.scale = 1;
       await say(pick(['Oh non ! Il s\'est libéré !', 'Raaah ! C\'était presque ça !', 'Zut ! Presque !']));
       return false;
@@ -1242,7 +1069,7 @@ async function evolve(m, to) {
   const old = stats(m), oldName = nm(m);
   m.id = to; const s = stats(m); m.hp = Math.min(s.hp, m.hp + s.hp - old.hp);
   B.evo.show = to; B.evo.white = false; markSeen(to); G.caught[to] = 1;
-  sfx.evolved();
+  sfx.level();
   await say(`Félicitations ! ${oldName} a évolué en ${nm(m)} !`);
   for (const [l, mv] of SPECIES[to].learn) if (l === m.lvl) await learnMove(m, mv);
   B.evo = null;
@@ -1262,8 +1089,9 @@ function drawWorld(g) {
   const px = P.moving ? P.fx + (G.x - P.fx) * P.t : G.x, py = P.moving ? P.fy + (G.y - P.fy) * P.t : G.y;
   const camX = clamp(Math.round(px * 16 + 8 - 128), 0, MW * 16 - 256), camY = clamp(Math.round(py * 16 + 8 - 96), 0, MH * 16 - 192);
   g.drawImage(mapFrames[Math.floor(tick / 500) % 2], camX, camY, 256, 192, 0, 0, 256, 192);
-  for (const it of ITEMS) if (!G.flags[it.id]) drawSparkle(g, it.x * 16 - camX, it.y * 16 - camY);
-  const ents = NPCS.map(n => ({ y: n.y, draw: () => drawPerson(g, n.x * 16 - camX, n.y * 16 - camY - 3, n.dir, 0, n.colors) }));
+  const ents = NPCS.map(n => ({ y: n.y, draw: n.pal
+    ? () => drawPal(g, n, n.x * 16 - camX, n.y * 16 - camY)
+    : () => drawPerson(g, n.x * 16 - camX, n.y * 16 - camY - 3, n.dir, 0, n.colors) }));
   const step = P.moving && P.t > 0.2 && P.t < 0.8 ? P.step : 0;
   ents.push({ y: py, draw: () => drawPerson(g, Math.round(px * 16) - camX, Math.round(py * 16) - camY - 3, G.dir, step, HERO) });
   ents.sort((a, b) => a.y - b.y).forEach(e => e.draw());
@@ -1276,14 +1104,14 @@ function drawWorld(g) {
     txt(g, '!', x + 2, y + 2, '#e03848');
   }
 }
-function drawSparkle(g, x, y) {
-  const r = (a, b, w, h, c) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
-  const big = Math.floor(tick / 300) % 2, phase = Math.floor(tick / 250) % 3;
-  r(4, 13, 8, 2, 'rgba(0,0,0,.15)');
-  r(7, 2 - big, 2, 12 + big * 2, '#ffc53a'); r(2 - big, 7, 12 + big * 2, 2, '#ffc53a');
-  r(6, 5, 4, 6, '#ffe680'); r(5, 6, 6, 4, '#ffe680'); r(7, 6, 2, 4, '#ffffff'); r(6, 7, 4, 2, '#ffffff');
-  if (phase === 0) { r(2, 2, 1, 1, '#ffffff'); r(13, 12, 1, 1, '#ffffff'); }
-  else if (phase === 1) { r(13, 3, 1, 1, '#ffffff'); r(2, 12, 1, 1, '#ffffff'); }
+// Petit Monstre compagnon sur la carte : il sautille sur place
+function drawPal(g, n, x, y) {
+  const hop = Math.max(0, Math.sin(tick / 180)) * 3;
+  g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(x + 3, y + 13, 10, 2);
+  g.save();
+  if (n.dir === 'left') { g.translate(x + 16, 0); g.scale(-1, 1); x = 0; }
+  g.drawImage(sprite(n.pal), x - 1, y - 4 - Math.round(hop), 18, 18);
+  g.restore();
 }
 function drawBall(g, x, y, rot) {
   g.save(); g.translate(x, y); g.rotate(rot);
@@ -1349,7 +1177,7 @@ function drawTitle(g) {
   txt(g, 'LILY QUEST', 131, 23, '#5a2050', 'center', 16);
   txt(g, 'LILY QUEST', 128, 20, '#ffffff', 'center', 16);
   g.fillStyle = '#e03848'; g.fillRect(96, 44, 64, 14); txt(g, 'VERSION DS', 128, 47, '#fff', 'center');
-  ['flamiaou', 'ticketou', 'aquapin', 'feuillon'].forEach((id, i) => drawMon(g, id, -8 + i * 64, 66 + Math.sin(tick / 250 + i * 2) * 4, { scale: 0.8 }));
+  ['flamiaou', 'aquapin', 'feuillon'].forEach((id, i) => drawMon(g, id, 12 + i * 80, 66 + Math.sin(tick / 250 + i * 2) * 4));
   if (Math.floor(tick / 500) % 2 && !dlg) txt(g, 'Touche A ou l\'écran', 128, 162, '#ffffff', 'center');
   drawDialog(g);
 }
@@ -1359,7 +1187,10 @@ function drawIntro(g) {
   g.fillStyle = bg; g.fillRect(0, 0, 256, 192);
   ell(g, 128, 130, 70, 12, 'rgba(0,0,0,.08)');
   if (introPick) drawMon(g, introPick, 88, 50 + Math.sin(tick / 200) * 3);
-  else g.drawImage(personCanvas('prof', NPCS[0].colors), 0, 0, 16, 16, 88, 50, 80, 80);
+  else {
+    g.drawImage(personCanvas('prof', NPCS[0].colors), 0, 0, 16, 16, 72, 50, 80, 80);
+    g.drawImage(sprite('petunia'), 146, 88 - Math.round(Math.max(0, Math.sin(tick / 180)) * 6), 44, 44);
+  }
   drawDialog(g);
 }
 function render() {
@@ -1370,12 +1201,6 @@ function render() {
   else if (topScene === 'battle' && B) drawBattle(g);
   else if (G) { drawWorld(g); drawDialog(g); }
   if (overlay) { g.fillStyle = overlay; g.fillRect(0, 0, 256, 192); }
-  if (toast && tick < toast.until) {
-    g.font = FONT; const w = Math.ceil(g.measureText(toast.text).width) + 16;
-    g.fillStyle = '#2c3a70'; g.fillRect(128 - w / 2 - 1, 5, w + 2, 18);
-    g.fillStyle = '#ffffff'; g.fillRect(128 - w / 2, 6, w, 16);
-    txt(g, toast.text, 128, 10, '#2c3a70', 'center');
-  }
 }
 
 // ---------- Boucle ----------
@@ -1390,11 +1215,6 @@ function loop(t) {
   }
   if (G && topScene === 'world') updateWorld(dt);
   bottom.classList.toggle('talking', !!dlg && !menu);
-  if (B && !B.evo && topScene === 'battle' && B.showM) {
-    const me = G.team[B.mi];
-    if (me && me.hp > 0 && me.hp / stats(me).hp <= 0.2 && tick - (B.lastAlarm || 0) > 900) { B.lastAlarm = tick; sfx.lowHp(); }
-  }
-  updateMusic(topScene === 'battle' ? 'battle' : topScene === 'world' ? 'world' : 'title');
   render();
   requestAnimationFrame(loop);
 }
@@ -1417,15 +1237,7 @@ function pressB() {
   if (menu && menu.back !== undefined) menuPick('back');
 }
 function pressMenu() { if (mode === 'world') openMenu(); }
-let toast = null;
-function toggleSound() {
-  unlockAudio();
-  soundOn = !soundOn;
-  try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch (e) { /* stockage bloqué */ }
-  toast = { text: soundOn ? '♪ Son activé' : 'Son coupé', until: tick + 1500 };
-  if (soundOn) sfx.blip();
-  if (topScene === 'world' && !menu) renderIdle();
-}
+function toggleSound() { soundOn = !soundOn; if (soundOn) sfx.blip(); }
 
 const KEY_DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
 addEventListener('keydown', e => {
@@ -1495,6 +1307,7 @@ async function titleFlow() {
 async function newGame() {
   topScene = 'intro'; renderIdle();
   await say('Bonjour ! Je suis le Prof. Lilas. Bienvenue dans le monde des Monstres !');
+  await say('Et voici Pétunia, ma fidèle compagne. Elle me suit partout !');
   await say('Ici, humains et Monstres vivent ensemble. Certains les collectionnent, d\'autres les font combattre.');
   await say('Mais dis-moi... comment t\'appelles-tu ?');
   const name = await askName();
@@ -1507,14 +1320,14 @@ async function newGame() {
       value: id, cls: 'starter',
       html: `<img src="${spriteURL(id)}" alt=""><span>${SPECIES[id].name}</span><span class="type" style="background:${TYPES[SPECIES[id].type]}">${SPECIES[id].type}</span>`,
     })), { cols: 3, title: 'Choisis ton partenaire' });
-    introPick = s; cry(s);
+    introPick = s;
     await say(`${SPECIES[s].name}, le Monstre de type ${SPECIES[s].type}. ${SPECIES[s].desc}`);
     const ok = await choose([{ value: true, label: 'Oui !' }, { value: false, label: 'Non' }], { cols: 2, title: `Choisir ${SPECIES[s].name} ?`, cls: 'big' });
     if (ok) starter = s;
     else introPick = null;
   }
   G = { name, x: 5, y: 22, dir: 'down', team: [makeMon(starter, 5)], box: [], items: { ball: 5, potion: 3 }, flags: {}, seen: { [starter]: 1 }, caught: { [starter]: 1 } };
-  sfx.item();
+  sfx.catch();
   await say(`Tu reçois ${SPECIES[starter].name} ! Prends-en bien soin.`);
   await say('Le Champion Orion t\'attend tout au nord. Passe me voir près de chez toi, j\'ai un cadeau !');
   introPick = null; topScene = 'world'; save(); renderIdle();
