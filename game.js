@@ -124,6 +124,8 @@ const sfx = {
   winWild: () => jingle('G5 C6 E6 G6*3 E6 G6*4', 240, 'C3*2 E3*2 G3*2 C4*6', { vol: 0.045 }),
   victory: () => jingle('G5 G5 G5 G5*2 E5*2 F5*2 G5*2 . F5 G5*6', 200, 'C3*2 C3*2 C3*2 C3*2 A2*2 A2*2 B2*2 B2*2 C3*6', { vol: 0.05 }),
   evolved: () => jingle('C5 E5 G5 C6 . G5 C6 E6*2 G6*6', 210, 'C3*4 G2*4 C3*8', { vol: 0.05 }),
+  // Ça mord à la ligne !
+  bite: () => { tone(1568, 0, 0.06, { vol: 0.06 }); tone(1568, 0.09, 0.06, { vol: 0.06 }); noise(0, 0.12, { freq: 2500, vol: 0.06 }); },
   // Petit cri joyeux de Pétunia
   chirp: () => { tone(1046, 0, 0.09, { type: 'triangle', vol: 0.07, to: 1568 }); tone(1397, 0.11, 0.14, { type: 'triangle', vol: 0.07, to: 2093 }); },
   lowHp: () => { tone(1175, 0, 0.08, { vol: 0.022 }); tone(988, 0.11, 0.08, { vol: 0.022 }); },
@@ -332,6 +334,10 @@ SPECIES.stalagmo = { name: 'Stalagmo', type: 'Roche', base: [50, 72, 78, 35], ra
   learn: [[1, 'charge'], [1, 'jetpierre'], [12, 'morsure'], [16, 'eboulement']],
   desc: 'Il pousse au plafond des grottes, une goutte à la fois... puis il tombe.',
   look: { shape: 'stalag', c1: '#8c7f74', c2: '#c4b8a8', c3: '#5e544a' } };
+SPECIES.lumiplouf = { name: 'Lumiplouf', type: 'Eau', base: [52, 58, 50, 66], rate: 0.35,
+  learn: [[1, 'charge'], [1, 'ecume'], [10, 'morsure'], [15, 'vague']],
+  desc: 'Il vit dans les bassins sombres des grottes. Sa lanterne attire les curieux... et les pêcheurs !',
+  look: { shape: 'fish', c1: '#3a74d0', c2: '#c4e6ff', c3: '#24509a', outline: '#0e1a3a', mouth: false } };
 const DEX = Object.keys(SPECIES);
 // Monstres compagnons des personnages (ni capturables, ni dans le Monstredex)
 const PALS = {
@@ -571,6 +577,17 @@ function drawCreature(g, L) {
       L.eyes = [[15, 17], [23, 17]];
       break;
     }
+    case 'fish': // poisson-lanterne tourné vers la gauche
+      P([29, 24, 38, 14, 36, 24, 38, 34], L.c3);
+      P([14, 16, 21, 9, 26, 17], L.c3);
+      E(20, 24, 13, 10, c1); E(18, 29, 9, 4.5, c2);
+      E(22, 34, 4, 2, L.c3, 0.4); E(26, 25, 3.5, 2, L.c3, -0.3);
+      P([15, 15, 17, 15, 12, 4, 10, 5], '#5a5a7a');
+      E(10, 5, 4.5, 4.5, '#ffc83a'); E(10, 5, 2.5, 2.5, '#fff6b0');
+      E(8, 27, 2, 1.2, '#ff9ab8');
+      P([7, 28, 13, 28, 10, 30], '#0e1a3a');
+      L.eyes = [[11, 20], [18, 20]];
+      break;
     case 'stalag':
       E(6, 27, 3, 2, c1); E(34, 27, 3, 2, c1);
       P([20, 2, 33, 36, 7, 36], c1);
@@ -1055,6 +1072,7 @@ function interact() {
   if (it) return runEvent(() => pickUp(it));
   const ch = tileAt(tx, ty);
   if (ch === 'S') return runEvent(() => say(SIGNS[`${tx},${ty}`] || '...'));
+  if (ch === '~' && curMap === 'cave') return runEvent(() => fishing(tx, ty));
   if (ch === 'W' && curMap === 'cave') {
     const px = tx * 16 + 8, poster = POSTERS.find(p => px >= p.x - 4 && px <= p.x + 36);
     return runEvent(() => say(poster ? `Une affiche : « ${poster.name}, star de la Grotte ». Elle a l'air très fière de son portrait !` : 'La paroi est fraîche et humide.'));
@@ -1122,13 +1140,56 @@ async function warp(map, x, y, dir) {
   G.map = map; loadMap(map); G.x = x; G.y = y; G.dir = dir; P.moving = false;
   save(); await wait(150);
   for (let i = 5; i >= 0; i--) { overlay = i ? `rgba(0,0,0,${i / 6})` : null; await wait(35); }
-  if (map === 'cave' && !G.flags.caveSeen) { G.flags.caveSeen = 1; await say('Une grotte fraîche et humide... Des voix et des rires résonnent au fond !'); }
+  if (map === 'cave' && !G.flags.caveSeen) { G.flags.caveSeen = 1; await say('Une grotte fraîche et humide... Des voix et des rires résonnent au fond !'); await say('Quelque chose brille et saute dans le bassin... Approche-toi de l\'eau et appuie sur A pour pêcher !'); }
 }
 function wildFor(x, y) {
   if (curMap === 'cave') return [pick(['caillouton', 'caillouton', 'stalagmo', 'stalagmo', 'fantomi', 'ratounet']), rand(6, 11)];
   if (y <= 7) return [pick(['fantomi', 'fantomi', 'voltacelle', 'caillouton', 'piouli', 'ratounet']), rand(11, 15)];
   if (y >= 14) return [pick(['ratounet', 'ratounet', 'piouli', 'piouli', 'caillouton', 'feuillon']), rand(2, 4)];
   return [pick(['ratounet', 'piouli', 'voltacelle', 'caillouton', 'voltacelle', 'aquapin', 'flamiaou', 'feuillon', 'ticketou', 'ticketou']), rand(4, 8)];
+}
+// ----- Pêche dans le bassin de la grotte -----
+let FISH = null; // bouchon affiché sur l'eau pendant la pêche
+async function fishing(x, y) {
+  await say('Un Lumiplouf brille au fond du bassin...');
+  const ok = await choose([{ value: true, label: 'Pêcher' }, { value: false, label: 'Non' }], { cols: 2, title: 'Lancer ta ligne ?', cls: 'big' });
+  if (!ok) return;
+  FISH = { x, y, bite: false };
+  sfx.throw();
+  try {
+    await say(`${G.name} lance sa ligne dans l'eau sombre...`);
+    await wait(rand(900, 2200));
+    if (Math.random() < 0.2) { FISH = null; await say('... Rien ne mord. Le Lumiplouf a filé sous un rocher !'); return; }
+    FISH.bite = true; sfx.bite();
+    await say('Oh ! Ça mord !');
+    FISH = null;
+    await battle([makeMon('lumiplouf', rand(8, 12))], null);
+  } finally { FISH = null; }
+}
+function drawPond(g, camX, camY) {
+  // Le Lumiplouf saute dans le bassin, sa lanterne brille sous l'eau
+  const cx = 12.5 * 16 - camX, cy = 9 * 16 - camY;
+  const T = 3600, t = tick % T, jump = t < 900, k = t / 900;
+  const glow = Math.floor(tick / 400) % 2;
+  if (!jump || FISH) {
+    const sx = cx + Math.round(Math.sin(tick / 700) * 10);
+    g.fillStyle = 'rgba(255,220,90,.35)'; g.fillRect(sx - 3, cy + 2, 7, 5);
+    g.fillStyle = glow ? '#fff6b0' : '#ffc83a'; g.fillRect(sx - 1, cy + 3, 3, 3);
+  } else {
+    const x = cx - 18 + k * 36, y = cy - Math.sin(k * Math.PI) * 18;
+    g.save(); g.translate(Math.round(x) + 9, Math.round(y)); g.scale(-1, 1);
+    g.drawImage(sprite('lumiplouf'), -9, -9, 18, 18); g.restore();
+  }
+  // Ronds dans l'eau au départ et à l'arrivée du saut
+  for (const [t0, x0] of [[0, cx - 18], [900, cx + 18]]) {
+    const a = (t - t0) / 500;
+    if (a >= 0 && a < 1) { g.strokeStyle = `rgba(220,240,255,${1 - a})`; g.lineWidth = 1; g.beginPath(); g.ellipse(x0, cy + 6, 3 + a * 8, 1 + a * 3, 0, 0, Math.PI * 2); g.stroke(); }
+  }
+  if (FISH) {
+    const bx = FISH.x * 16 - camX + 8, by = FISH.y * 16 - camY + 8 + (FISH.bite ? 3 : Math.round(Math.sin(tick / 200)));
+    g.fillStyle = '#e83848'; g.fillRect(bx - 2, by - 3, 4, 3); g.fillStyle = '#fff'; g.fillRect(bx - 2, by, 4, 2);
+    if (FISH.bite) txt(g, '!', bx - 3, by - 16, '#ffd23f');
+  }
 }
 async function wildBattle() {
   const [id, l] = wildFor(G.x, G.y);
@@ -1483,6 +1544,7 @@ function drawWorld(g) {
   const camX = clamp(Math.round(px * 16 + 8 - 128), 0, MW * 16 - 256), camY = clamp(Math.round(py * 16 + 8 - 96), 0, MH * 16 - 192);
   g.drawImage(mapFrames[Math.floor(tick / 500) % 2], camX, camY, 256, 192, 0, 0, 256, 192);
   for (const it of ITEMS) if ((it.map || 'route') === curMap && !G.flags[it.id]) drawSparkle(g, it.x * 16 - camX, it.y * 16 - camY);
+  if (curMap === 'cave') drawPond(g, camX, camY);
   if (curMap === 'cave') for (const p of POSTERS) {
     const x = p.x - camX, y = p.y - camY;
     g.fillStyle = '#2a1e14'; g.fillRect(x - 3, y - 3, 38, 46);
