@@ -215,3 +215,7 @@ button { font-family: inherit; }
 .login .row2 .opt { min-height: 10cqw; font-size: 2.8cqw; text-align: center; }
 .login .link { background: none; border: 0; color: #4a5ca0; font-size: 2.3cqw; text-decoration: underline; cursor: pointer; padding: 1cqw; }
 .cloud { color: #4a90e8; }
+.snd {
+  font: inherit; font-size: 2.3cqw; margin-left: 1cqw; padding: .6cqw 1.4cqw; cursor: pointer;
+  background: #fff; color: #4a5ca0; border: .4cqw solid #9aa6d0; border-radius: 2cqw;
+}

@@ -13,12 +13,21 @@ const approach = (a, b, s) => (a < b ? Math.min(b, a + s) : Math.max(b, a - s));
 const until = fn => new Promise(res => { const i = setInterval(() => { if (fn()) { clearInterval(i); res(); } }, 16); });
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// ---------- Son (bips façon console) ----------
+// ---------- Son : bruitages et musique façon console ----------
+const SOUND_KEY = 'lilyquest-ds-sound';
 let audio = null, soundOn = true;
-function beep(freq = 660, dur = 0.06, type = 'square', vol = 0.05, slide = 0) {
-  if (!soundOn) return;
+try { soundOn = localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) { /* stockage bloqué */ }
+// Les navigateurs bloquent le son tant qu'on n'a pas touché la page : on le débloque au premier geste
+function unlockAudio() {
   try {
     audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch (e) { /* pas de son, tant pis */ }
+}
+['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlockAudio, true));
+function beep(freq = 660, dur = 0.06, type = 'square', vol = 0.05, slide = 0) {
+  if (!soundOn || !audio) return;
+  try {
     const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
     o.type = type; o.frequency.setValueAtTime(freq, t);
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
@@ -38,6 +47,75 @@ const sfx = {
   shake: () => beep(300, 0.08, 'triangle', 0.07),
   alert: () => tune([988, 1319], 80, 0.08),
 };
+
+// Musique : mélodies originales. Notes en croches ; « E5*2 » = 2 croches, « . » = silence, « | » = barre de mesure.
+const SONGS = {
+  title: { bpm: 100, ch: [
+    { wave: 'square', vol: 0.03, notes: 'C5 E5 G5 C6*4 G5 | A5*2 F5*2 C6*4 | B5 A5 G5 F5 E5*2 D5 E5 | G5*8 | E5 G5 C6 E6*4 D6 | C6*2 A5*2 F5*4 | G5 A5 B5 D6 C6*2 B5 G5 | C6*8' },
+    { wave: 'triangle', vol: 0.07, notes: 'C3*4 E3*4 | F2*4 A2*4 | G2*4 B2*4 | C3*4 G2*4 | C3*4 E3*4 | F2*4 A2*4 | G2*4 G3*4 | C3*4 C2*4' },
+  ] },
+  world: { bpm: 126, ch: [
+    { wave: 'square', vol: 0.028, notes: 'E5 G5 C6*2 B5 G5 E5*2 | F5 A5 C6*2 B5 A5 G5*2 | E5 G5 C6 E6 D6*2 C6 B5 | A5*2 G5*2 . G5 A5 B5 | C6*2 A5 F5 E5*2 D5 C5 | F5 A5 C6*2 A5 G5 F5 E5 | D5 E5 F5 A5 G5*2 E5 C5 | D5*4 . G4 A4 B4' },
+    { wave: 'triangle', vol: 0.07, notes: 'C3*2 G3*2 C3*2 G3*2 | F2*2 C3*2 F2*2 C3*2 | C3*2 G3*2 C3*2 G3*2 | G2*2 D3*2 G2*2 D3*2 | A2*2 E3*2 A2*2 E3*2 | F2*2 C3*2 F2*2 C3*2 | D3*2 A3*2 G2*2 D3*2 | G2*2 D3*2 G2*2 B2*2' },
+  ] },
+  battle: { bpm: 152, ch: [
+    { wave: 'square', vol: 0.03, notes: 'A4 A4 C5 A4 D5 A4 E5 D5 | C5 A4 C5 E5 G5*2 F5 E5 | F5 F5 E5 D5 E5*2 C5 A4 | B4 C5 D5 B4 E5*4 | A5 A5 G5 E5 G5 A5*2 E5 | F5 E5 D5 C5 D5*2 E5 F5 | E5 D5 C5 B4 C5*2 A4 B4 | G#4*2 B4*2 E5*2 . .' },
+    { wave: 'triangle', vol: 0.08, notes: 'A2 A3 A2 A3 A2 A3 A2 A3 | A2 A3 A2 A3 C3 C4 C3 C4 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3 | A2 A3 A2 A3 A2 A3 A2 A3 | D2 D3 D2 D3 D2 D3 D2 D3 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3' },
+  ] },
+};
+const noteFreq = n => {
+  const m = /^([A-G])(#?)(\d)$/.exec(n);
+  const midi = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] ? 1 : 0) + (+m[3] + 1) * 12;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+};
+const parseNotes = str => str.split(/\s+/).filter(t => t && t !== '|').map(t => {
+  const [n, mult] = t.split('*');
+  return [n === '.' ? null : noteFreq(n), +(mult || 1)];
+});
+const music = { want: null, playing: null };
+function startMusic(name) {
+  const song = SONGS[name], step = 60 / song.bpm / 2;
+  const chans = song.ch.map(c => ({ ...c, seq: parseNotes(c.notes), i: 0 }));
+  chans.forEach(c => { c.len = c.seq.reduce((a, n) => a + n[1], 0); });
+  const len = Math.max(...chans.map(c => c.len));
+  const out = audio.createGain(); out.connect(audio.destination);
+  const t0 = audio.currentTime + 0.08;
+  chans.forEach(c => { c.at = t0; });
+  const p = { name, step, chans, len, out };
+  p.timer = setInterval(() => scheduleMusic(p), 60);
+  music.playing = p; scheduleMusic(p);
+}
+function scheduleMusic(p) {
+  const horizon = audio.currentTime + 0.3;
+  for (const c of p.chans) {
+    while (c.at < horizon) {
+      const [f, d] = c.seq[c.i], dur = d * p.step;
+      if (f) {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = c.wave; o.frequency.value = f;
+        g.gain.setValueAtTime(c.vol, c.at); g.gain.setValueAtTime(c.vol, c.at + dur * 0.7);
+        g.gain.exponentialRampToValueAtTime(0.0001, c.at + dur * 0.95);
+        o.connect(g).connect(p.out); o.start(c.at); o.stop(c.at + dur);
+      }
+      c.at += dur;
+      if (++c.i >= c.seq.length) { c.i = 0; c.at += (p.len - c.len) * p.step; }
+    }
+  }
+}
+function stopMusic() {
+  const p = music.playing; if (!p) return;
+  clearInterval(p.timer);
+  try { p.out.gain.setTargetAtTime(0, audio.currentTime, 0.04); setTimeout(() => p.out.disconnect(), 400); } catch (e) { /* déjà arrêté */ }
+  music.playing = null;
+}
+// Appelée à chaque image : lance, change ou coupe la musique selon l'écran et le réglage du son
+function updateMusic(name) {
+  music.want = name;
+  const running = soundOn && audio && audio.state === 'running';
+  const cur = music.playing && music.playing.name;
+  if (!running || !name) { if (cur) stopMusic(); return; }
+  if (cur !== name) { stopMusic(); startMusic(name); }
+}
 
 // ---------- Données : types, attaques, espèces ----------
 const TYPES = { Feu: '#f08030', Eau: '#4a90e8', Plante: '#58b848', Normal: '#9a9a78', 'Élec': '#e8b820', Roche: '#b09040', Spectre: '#7058a8' };
@@ -627,7 +705,7 @@ function renderIdle() {
   } else if (topScene === 'world' && G) {
     const badge = G.flags.champ ? ' <span class="badge">★</span>' : '';
     bottom.innerHTML = `<div class="panel">
-      <div class="wtop"><span>${esc(G.name)}${badge}${account.user ? ' <small class="cloud" title="Sauvegarde en ligne">☁</small>' : ''}</span><span class="bag">Ball×${G.items.ball} · Potion×${G.items.potion}</span></div>
+      <div class="wtop"><span>${esc(G.name)}${badge}${account.user ? ' <small class="cloud" title="Sauvegarde en ligne">☁</small>' : ''}</span><span class="bag">Ball×${G.items.ball} · Potion×${G.items.potion} <button class="snd" data-snd>${soundOn ? '♪ ON' : '♪ OFF'}</button></span></div>
       <div class="wteam">${Array.from({ length: 6 }, (_, i) => {
         const m = G.team[i]; if (!m) return '<div class="wmon empty"></div>';
         const p = m.hp / stats(m).hp * 100;
@@ -639,6 +717,7 @@ function renderIdle() {
       </div>
       <p class="hint" style="text-align:center">▼ Appuie sur A</p></div>`;
     bottom.querySelectorAll('[data-w]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); openMenu(b.dataset.w); }));
+    bottom.querySelector('[data-snd]').addEventListener('click', e => { e.stopPropagation(); toggleSound(); });
   } else {
     bottom.innerHTML = `<div class="panel center"><p class="hint">▼ Appuie sur A</p></div>`;
   }
@@ -1185,6 +1264,12 @@ function render() {
   else if (topScene === 'battle' && B) drawBattle(g);
   else if (G) { drawWorld(g); drawDialog(g); }
   if (overlay) { g.fillStyle = overlay; g.fillRect(0, 0, 256, 192); }
+  if (toast && tick < toast.until) {
+    g.font = FONT; const w = Math.ceil(g.measureText(toast.text).width) + 16;
+    g.fillStyle = '#2c3a70'; g.fillRect(128 - w / 2 - 1, 5, w + 2, 18);
+    g.fillStyle = '#ffffff'; g.fillRect(128 - w / 2, 6, w, 16);
+    txt(g, toast.text, 128, 10, '#2c3a70', 'center');
+  }
 }
 
 // ---------- Boucle ----------
@@ -1199,6 +1284,7 @@ function loop(t) {
   }
   if (G && topScene === 'world') updateWorld(dt);
   bottom.classList.toggle('talking', !!dlg && !menu);
+  updateMusic(topScene === 'battle' ? 'battle' : topScene === 'world' ? 'world' : 'title');
   render();
   requestAnimationFrame(loop);
 }
@@ -1221,7 +1307,15 @@ function pressB() {
   if (menu && menu.back !== undefined) menuPick('back');
 }
 function pressMenu() { if (mode === 'world') openMenu(); }
-function toggleSound() { soundOn = !soundOn; if (soundOn) sfx.blip(); }
+let toast = null;
+function toggleSound() {
+  unlockAudio();
+  soundOn = !soundOn;
+  try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch (e) { /* stockage bloqué */ }
+  toast = { text: soundOn ? '♪ Son activé' : 'Son coupé', until: tick + 1500 };
+  if (soundOn) sfx.blip();
+  if (topScene === 'world' && !menu) renderIdle();
+}
 
 const KEY_DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
 addEventListener('keydown', e => {
