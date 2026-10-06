@@ -430,20 +430,20 @@ const ROUTE_NPCS = [
 ];
 // Les trois dresseuses de la grotte : elles papotent, pas de combat
 const CAVE_NPCS = [
-  { id: 'rubis', x: 9, y: 5, dir: 'right', name: 'Rubis', chat: true,
+  { id: 'rubis', x: 9, y: 5, dir: 'right', name: 'Auriane', chat: true,
     colors: { style: 'bun', earrings: true, tank: true, hair: '#6a4a30', shirt: '#d8202a', pants: '#2a3a5a', skin: '#f0c8a8' } },
-  { id: 'ebene', x: 11, y: 5, dir: 'left', name: 'Ébène', chat: true,
+  { id: 'ebene', x: 11, y: 5, dir: 'left', name: 'Linda', chat: true,
     colors: { style: 'long', hair: '#3a2418', shirt: '#22222a', pants: '#4a4a6a', skin: '#f2cfb4' } },
-  { id: 'perle', x: 10, y: 4, dir: 'down', name: 'Perle', chat: true,
+  { id: 'perle', x: 10, y: 4, dir: 'down', name: 'Lily', chat: true,
     colors: { style: 'bangs', glasses: true, necklace: true, hair: '#7a5a3a', shirt: '#f4f4f0', pants: '#5a6a8a', skin: '#f0c8a8' } },
 ];
 [...ROUTE_NPCS, ...CAVE_NPCS].forEach(n => { n.hx = n.x; n.hy = n.y; n.hdir = n.dir; });
 let NPCS = ROUTE_NPCS;
 // Affiches sur la paroi de la grotte (positions en pixels)
 const POSTERS = [
-  { src: 'assets/affiche1.png', x: 82, y: 18, name: 'Rubis' },
-  { src: 'assets/affiche2.png', x: 154, y: 18, name: 'Ébène' },
-  { src: 'assets/affiche3.png', x: 226, y: 18, name: 'Perle' },
+  { src: 'assets/affiche1.png', x: 82, y: 18, name: 'Auriane' },
+  { src: 'assets/affiche2.png', x: 154, y: 18, name: 'Linda' },
+  { src: 'assets/affiche3.png', x: 226, y: 18, name: 'Lily' },
 ];
 const npcAt = (x, y) => NPCS.find(n => n.x === x && n.y === y);
 // Objets cachés : une étincelle à ramasser avec A (une seule fois par partie)
@@ -1054,10 +1054,10 @@ async function pickUp(it) {
   await say(`Tu ramasses l'étincelle... Tu as trouvé ${it.qty > 1 ? it.qty + ' ' : 'une '}${ITEM_NAMES[it.item]} !`);
 }
 const CHATS = [
-  ['Rubis : Vous avez vu ? On a nos affiches dans la grotte !', 'Ébène : Trop la classe. Même les Caillouton viennent les admirer.', 'Perle : Normal, on est les stars de Lily Quest !'],
-  ['Perle : Quelqu\'un a vu mes lunettes ?', 'Rubis : ... Elles sont sur ta tête, Perle.', 'Perle : Ah oui ! Merci !'],
-  ['Ébène : Aujourd\'hui, je capture un Stalagmo. J\'en suis sûre.', 'Rubis : Tu dis ça tous les jours !', 'Perle : Et tous les jours, c\'est un Caillouton qui sort.'],
-  ['Rubis : Ce soir, on code la suite du jeu ?', 'Ébène : Oui ! J\'ai plein d\'idées de Monstres.', 'Perle : Moi je m\'occupe de la musique !'],
+  ['Auriane : Vous avez vu ? On a nos affiches dans la grotte !', 'Linda : Trop la classe. Même les Caillouton viennent les admirer.', 'Lily : Normal, on est les stars de Lily Quest !'],
+  ['Lily : Quelqu\'un a vu mes lunettes ?', 'Auriane : ... Elles sont sur ta tête, Lily.', 'Lily : Ah oui ! Merci !'],
+  ['Linda : Aujourd\'hui, je capture un Stalagmo. J\'en suis sûre.', 'Auriane : Tu dis ça tous les jours !', 'Lily : Et tous les jours, c\'est un Caillouton qui sort.'],
+  ['Auriane : Ce soir, on code la suite du jeu ?', 'Linda : Oui ! J\'ai plein d\'idées de Monstres.', 'Lily : Moi je m\'occupe de la musique !'],
 ];
 async function chat(n) {
   await say('Les trois dresseuses sont en pleine discussion...');
