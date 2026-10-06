@@ -1260,7 +1260,7 @@ function drawTitle(g) {
   txt(g, 'LILY QUEST', 131, 23, '#5a2050', 'center', 16);
   txt(g, 'LILY QUEST', 128, 20, '#ffffff', 'center', 16);
   g.fillStyle = '#e03848'; g.fillRect(96, 44, 64, 14); txt(g, 'VERSION DS', 128, 47, '#fff', 'center');
-  ['flamiaou', 'aquapin', 'feuillon'].forEach((id, i) => drawMon(g, id, 12 + i * 80, 66 + Math.sin(tick / 250 + i * 2) * 4));
+  ['flamiaou', 'ticketou', 'aquapin', 'feuillon'].forEach((id, i) => drawMon(g, id, -8 + i * 64, 66 + Math.sin(tick / 250 + i * 2) * 4, { scale: 0.8 }));
   if (Math.floor(tick / 500) % 2 && !dlg) txt(g, 'Touche A ou l\'écran', 128, 162, '#ffffff', 'center');
   drawDialog(g);
 }
