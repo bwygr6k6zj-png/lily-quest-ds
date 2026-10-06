@@ -152,6 +152,7 @@ const MOVES = {
   lechouille: { name: 'Léchouille', type: 'Spectre', pow: 30, acc: 100 },
   ombre: { name: 'Ombre', type: 'Spectre', pow: 50, acc: 100 },
   cauchemar: { name: 'Cauchemar', type: 'Spectre', pow: 80, acc: 95 },
+  papier: { name: 'Coupure Papier', type: 'Normal', pow: 50, acc: 100 },
 };
 
 // base : [PV, Attaque, Défense, Vitesse]
@@ -200,6 +201,10 @@ const SPECIES = {
     learn: [[1, 'lechouille'], [6, 'ombre'], [16, 'cauchemar']],
     desc: 'Il se cache dans les herbes la nuit pour faire « Bouh ! ».',
     look: { shape: 'ghost', c1: '#9a7ad8', c2: '#c8b0f0', outline: '#2a1640', mouth: false } },
+  ticketou: { name: 'Tickétou', type: 'Normal', base: [44, 50, 42, 70], rate: 0.45,
+    learn: [[1, 'charge'], [1, 'papier'], [9, 'morsure'], [15, 'ruee']],
+    desc: 'Un ticket de caisse échappé d\'un magasin. Il imprime ses humeurs sur son ventre.',
+    look: { shape: 'receipt', c1: '#fbf8ee', c2: '#b9b6c6', c3: '#e2ddca' } },
 };
 const DEX = Object.keys(SPECIES);
 
@@ -379,6 +384,18 @@ function drawCreature(g, L) {
       E(20, 24, 3.5, 2.5, '#3a1a4a'); E(20, 25.5, 2, 1, '#ff7aa8');
       L.eyes = [[14, 15], [23, 15]]; L.eyeH = 4;
       break;
+    case 'receipt': {
+      E(8, 21, 3, 2, c1, -0.4); E(32, 21, 3, 2, c1, 0.4);
+      const pts = [11, 5, 29, 5, 29, 34];
+      for (let x = 29; x > 11; x -= 3) pts.push(x - 1.5, 37, x - 3, 34);
+      P(pts, c1);
+      E(20, 5, 9.5, 2, L.c3);
+      E(13, 17, 1.8, 1.1, '#ffb6c8'); E(27, 17, 1.8, 1.1, '#ffb6c8');
+      g.fillStyle = c2; g.fillRect(14, 22, 12, 1); g.fillRect(14, 25, 8, 1); g.fillRect(24, 25, 2, 1);
+      g.fillStyle = '#6a6678'; g.fillRect(14, 29, 12, 1);
+      L.eyes = [[15, 11], [23, 11]];
+      break;
+    }
   }
 }
 function pixelize(g, outline) {
@@ -809,7 +826,7 @@ async function healEvent(ch) {
 function wildFor(x, y) {
   if (y <= 7) return [pick(['fantomi', 'fantomi', 'voltacelle', 'caillouton', 'piouli', 'ratounet']), rand(11, 15)];
   if (y >= 14) return [pick(['ratounet', 'ratounet', 'piouli', 'piouli', 'caillouton', 'feuillon']), rand(2, 4)];
-  return [pick(['ratounet', 'piouli', 'voltacelle', 'caillouton', 'voltacelle', 'aquapin', 'flamiaou', 'feuillon']), rand(4, 8)];
+  return [pick(['ratounet', 'piouli', 'voltacelle', 'caillouton', 'voltacelle', 'aquapin', 'flamiaou', 'feuillon', 'ticketou', 'ticketou']), rand(4, 8)];
 }
 async function wildBattle() {
   const [id, l] = wildFor(G.x, G.y);
