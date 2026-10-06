@@ -21,7 +21,8 @@ try { soundOn = localStorage.getItem(SOUND_KEY) !== 'off'; } catch (e) { /* stoc
 function unlockAudio() {
   try {
     audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-    if (audio.state === 'suspended') audio.resume();
+    if (soundOn && audio.state === 'suspended') audio.resume();
+    if (!soundOn && audio.state === 'running') audio.suspend();
   } catch (e) { /* pas de son, tant pis */ }
 }
 ['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlockAudio, true));
@@ -85,7 +86,7 @@ const sfx = {
   // Rencontre sauvage : tourbillon + souffle qui monte
   encounter: () => { for (let i = 0; i < 12; i++) tone(1400 - i * 80, i * 0.03, 0.05, { vol: 0.04 }); noise(0, 0.55, { freq: 300, to: 5000, vol: 0.06 }); },
   // Un dresseur te repère : « ! » puis petit thème
-  alert: () => { tone(1568, 0, 0.07, { vol: 0.06 }); tone(2093, 0.08, 0.16, { vol: 0.06 }); jingle('. . . E5 E5 G5 E5 A5*2 G5 E5*2', 230, '. . . A2*2 A2*2 C3*2 E3*2'); },
+  alert: () => { tone(1568, 0, 0.07, { vol: 0.06 }); tone(2093, 0.08, 0.16, { vol: 0.06 }); },
   heal: () => jingle('C5 E5 G5 C6 . G5 C6*3 . E6*4', 190, 'C3*4 G3*4 C3*4 . . . .', { type: 'triangle', vol: 0.09 }),
   potion: () => { [784, 988, 1175, 1568, 1976, 2349].forEach((f, i) => tone(f, i * 0.05, 0.12, { type: 'sine', vol: 0.06 })); },
   item: () => jingle('G5 G5 G5 C6*2 . E6*4', 210, 'C3*2 C3*2 E3*2 G3*4', { vol: 0.05 }),
@@ -138,11 +139,50 @@ const SONGS = {
     { wave: 'square', vol: 0.028, notes: 'E5 G5 C6*2 B5 G5 E5*2 | F5 A5 C6*2 B5 A5 G5*2 | E5 G5 C6 E6 D6*2 C6 B5 | A5*2 G5*2 . G5 A5 B5 | C6*2 A5 F5 E5*2 D5 C5 | F5 A5 C6*2 A5 G5 F5 E5 | D5 E5 F5 A5 G5*2 E5 C5 | D5*4 . G4 A4 B4' },
     { wave: 'triangle', vol: 0.07, notes: 'C3*2 G3*2 C3*2 G3*2 | F2*2 C3*2 F2*2 C3*2 | C3*2 G3*2 C3*2 G3*2 | G2*2 D3*2 G2*2 D3*2 | A2*2 E3*2 A2*2 E3*2 | F2*2 C3*2 F2*2 C3*2 | D3*2 A3*2 G2*2 D3*2 | G2*2 D3*2 G2*2 B2*2' },
   ] },
-  battle: { bpm: 152, ch: [
+  wild: { bpm: 152, ch: [
     { wave: 'square', vol: 0.03, notes: 'A4 A4 C5 A4 D5 A4 E5 D5 | C5 A4 C5 E5 G5*2 F5 E5 | F5 F5 E5 D5 E5*2 C5 A4 | B4 C5 D5 B4 E5*4 | A5 A5 G5 E5 G5 A5*2 E5 | F5 E5 D5 C5 D5*2 E5 F5 | E5 D5 C5 B4 C5*2 A4 B4 | G#4*2 B4*2 E5*2 . .' },
     { wave: 'triangle', vol: 0.08, notes: 'A2 A3 A2 A3 A2 A3 A2 A3 | A2 A3 A2 A3 C3 C4 C3 C4 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3 | A2 A3 A2 A3 A2 A3 A2 A3 | D2 D3 D2 D3 D2 D3 D2 D3 | F2 F3 F2 F3 F2 F3 F2 F3 | E2 E3 E2 E3 E2 E3 E2 E3' },
   ] },
 };
+Object.assign(SONGS, {
+  trainer: { bpm: 160, ch: [
+    { wave: 'square', vol: 0.03, notes: 'E5 . E5 G5 B5*2 A5 G5 | F#5 . F#5 A5 B5*2 A5 F#5 | E5 G5 B5 E6 D6*2 B5 G5 | A5*2 F#5*2 D#5*4 | E5 E5 G5 E5 C6*2 B5 A5 | B5 B5 D6 B5 E6*2 D6 B5 | C6 B5 A5 G5 F#5*2 G5 A5 | B5*4 B4*4' },
+    { wave: 'triangle', vol: 0.08, notes: 'E2 E3 E2 E3 E2 E3 E2 E3 | D2 D3 D2 D3 D2 D3 D2 D3 | C2 C3 C2 C3 C2 C3 C2 C3 | B1 B2 B1 B2 B1 B2 B1 B2 | A1 A2 A1 A2 A1 A2 A1 A2 | G1 G2 G1 G2 G1 G2 G1 G2 | C2 C3 C2 C3 D2 D3 D2 D3 | B1 B2 B1 B2 B1 B2 B1 B2' },
+  ] },
+  champion: { bpm: 168, ch: [
+    { wave: 'square', vol: 0.032, notes: 'C5 D#5 G5 C6 B5 G5 D#5 D5 | C5*2 G4*2 C5 D5 D#5 F5 | G5 G5 G#5 G5 F5 D#5 D5 C5 | B4*2 D5*2 G5*4 | C6 C6 B5 G5 G#5*2 G5 F5 | D#5 D#5 D5 C5 D5*2 D#5 F5 | G5 F5 D#5 D5 C5*2 B4 D5 | C5*4 G4*4' },
+    { wave: 'triangle', vol: 0.09, notes: 'C2 C3 C2 C3 C2 C3 C2 C3 | G#1 G#2 G#1 G#2 G#1 G#2 G#1 G#2 | F1 F2 F1 F2 F1 F2 F1 F2 | G1 G2 G1 G2 G1 G2 G1 G2 | C2 C3 C2 C3 C2 C3 C2 C3 | G#1 G#2 G#1 G#2 G#1 G#2 G#1 G#2 | F1 F2 F1 F2 G1 G2 G1 G2 | C2 C3 C2 C3 G1 G2 G1 G2' },
+  ] },
+  victory: { bpm: 132, ch: [
+    { wave: 'square', vol: 0.03, notes: 'G5 G5 G5 G5*2 E5 F5 G5 | A5 G5 F5 E5 D5*4 | F5 F5 F5 F5*2 D5 E5 F5 | G5 F5 E5 D5 C5*4' },
+    { wave: 'triangle', vol: 0.08, notes: 'C3*2 G3*2 C3*2 G3*2 | F2*2 C3*2 G2*2 D3*2 | G2*2 D3*2 G2*2 D3*2 | G2*2 B2*2 C3*4' },
+  ] },
+  spotted: { bpm: 176, ch: [
+    { wave: 'square', vol: 0.03, notes: 'E5 . E5 G5 . E5 A5 G5 | E5 . E5 G5 . E5 B5 A5' },
+    { wave: 'triangle', vol: 0.08, notes: 'A2 A3 A2 A3 A2 A3 A2 A3 | A2 A3 A2 A3 E2 E3 E2 E3' },
+  ] },
+  cave: { bpm: 84, ch: [
+    { wave: 'triangle', vol: 0.06, notes: 'D5*2 . F5 A5*2 . G5 | F5*2 E5 D5 E5*4 | D5*2 . F5 A5*2 . C6 | A#5*2 A5 G5 A5*4 | . . D6*2 C6 A5 G5 F5 | E5*2 F5 G5 A5*4 | . . D5 F5 E5 C5 D5*2 | D5*8' },
+    { wave: 'triangle', vol: 0.07, notes: 'D2*4 A2*4 | A#1*4 A1*4 | D2*4 A2*4 | G1*4 A1*4 | D2*4 C2*4 | A#1*4 A1*4 | G1*4 A1*4 | D2*8' },
+  ] },
+  evolve: { bpm: 140, ch: [
+    { wave: 'square', vol: 0.025, notes: 'C5 E5 G5 E5 C5 E5 G5 E5 | D5 F5 A5 F5 D5 F5 A5 F5' },
+    { wave: 'triangle', vol: 0.07, notes: 'C3*8 | D3*8' },
+  ] },
+});
+// Choix de la musique selon la situation (comme dans les vrais jeux)
+let musicOverride = null;
+function songFor() {
+  if (musicOverride) return musicOverride;
+  if (topScene === 'battle' && B) {
+    if (B.evo) return 'evolve';
+    if (B.won) return 'victory';
+    if (B.trainer) return B.trainer.id === 'champ' ? 'champion' : 'trainer';
+    return 'wild';
+  }
+  if (topScene === 'world') return curMap === 'cave' ? 'cave' : 'world';
+  return 'title';
+}
 const noteFreq = n => {
   const m = /^([A-G])(#?)(\d)$/.exec(n);
   const midi = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[m[1]] + (m[2] ? 1 : 0) + (+m[3] + 1) * 12;
@@ -288,6 +328,10 @@ const SPECIES = {
     desc: 'Un ticket de caisse échappé d\'un magasin. Il imprime ses humeurs sur son ventre.',
     look: { shape: 'receipt', c1: '#fbf8ee', c2: '#b9b6c6', c3: '#e2ddca' } },
 };
+SPECIES.stalagmo = { name: 'Stalagmo', type: 'Roche', base: [50, 72, 78, 35], rate: 0.35,
+  learn: [[1, 'charge'], [1, 'jetpierre'], [12, 'morsure'], [16, 'eboulement']],
+  desc: 'Il pousse au plafond des grottes, une goutte à la fois... puis il tombe.',
+  look: { shape: 'stalag', c1: '#8c7f74', c2: '#c4b8a8', c3: '#5e544a' } };
 const DEX = Object.keys(SPECIES);
 // Monstres compagnons des personnages (ni capturables, ni dans le Monstredex)
 const PALS = {
@@ -334,23 +378,42 @@ const MAP_SRC = [
   'T.....F.......==.......F.....T',
   'T..RRRRR......==.....RRRRR...T',
   'T..RRRRR......==.....RRRRR...T',
-  'T..HHDHH......==.....HHPHH...T',
-  'T....===================.....T',
-  'T.............==.............T',
+  'T..HHDHH......==.....HHPHH...k',
+  'T....===================.....K',
+  'T.............==.............k',
   'T..F..F.......==.......F..F..T',
   'T~~~~~........==........~~~~~T',
   'T~~~~~~................~~~~~~T',
   'TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
 ];
-const MW = 30, MH = MAP_SRC.length;
-const MAP = MAP_SRC.map(r => r.padEnd(MW, 'T').slice(0, MW));
-const tileAt = (x, y) => (x < 0 || y < 0 || x >= MW || y >= MH ? 'T' : MAP[y][x]);
-const SOLID = new Set(['T', '~', 'R', 'H', 'X', 'S']);
+// Grotte : w plafond · W paroi · o sol · ; herbe de grotte · r rocher · E sortie
+const CAVE_SRC = [
+  'wwwwwwwwwwwwwwwwwwwwww',
+  'wwWWWWWWWWWWWWWWWWWWww',
+  'wwWWWWWWWWWWWWWWWWWWww',
+  'wwWWWWWWWWWWWWWWWWWWww',
+  'wwoooooooooooooooooo;w',
+  'w;;oooooooooooooooo;;w',
+  'w;;;oooorooooooooo;;;w',
+  'Eooooooooooooooooooo;w',
+  'w;;oooooooo~~~ooooo;;w',
+  'w;;;ooooooo~~~~oooo;;w',
+  'w;;;;oorooooo~~ooooo;w',
+  'w;;;;oooooooooooor;;;w',
+  'ww;;;;;ooooooooo;;;;ww',
+  'wwww;;;;;;;;;;;;;;wwww',
+  'wwwwwwwwwwwwwwwwwwwwww',
+];
+let curMap = 'route', MW = 30, MH = MAP_SRC.length;
+let MAP = MAP_SRC.map(r => r.padEnd(MW, 'T').slice(0, MW));
+const tileAt = (x, y) => (x < 0 || y < 0 || x >= MW || y >= MH ? (curMap === 'cave' ? 'w' : 'T') : MAP[y][x]);
+const SOLID = new Set(['T', '~', 'R', 'H', 'X', 'S', 'k', 'w', 'W', 'r']);
+const GRASS = new Set([',', ';']);
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const OPP = { up: 'down', down: 'up', left: 'right', right: 'left' };
 const SIGNS = { '26,9': 'Route 1 — Attention ! Des Monstres sauvages se cachent dans les hautes herbes.' };
 
-const NPCS = [
+const ROUTE_NPCS = [
   { id: 'prof', x: 10, y: 23, dir: 'down', name: 'Prof. Lilas',
     colors: { hair: '#d8d8e0', shirt: '#ffffff', pants: '#5a5f78', skin: '#f2c8a0' } },
   { id: 'petunia', x: 11, y: 23, dir: 'down', name: 'Pétunia', pal: 'petunia' },
@@ -365,14 +428,30 @@ const NPCS = [
     intro: 'Tu as traversé toute la Route 1 ? Montre-moi ta force !', lose: 'Quelle puissance... Incroyable !', after: 'Reviens me voir quand tu veux, Champion·ne !',
     colors: { hair: '#2a2a3a', shirt: '#3a3a5a', pants: '#2a2a3a', skin: '#e8b890', cape: '#8a3ad0' } },
 ];
-NPCS.forEach(n => { n.hx = n.x; n.hy = n.y; n.hdir = n.dir; });
+// Les trois dresseuses de la grotte : elles papotent, pas de combat
+const CAVE_NPCS = [
+  { id: 'rubis', x: 9, y: 5, dir: 'right', name: 'Rubis', chat: true,
+    colors: { style: 'bun', earrings: true, tank: true, hair: '#6a4a30', shirt: '#d8202a', pants: '#2a3a5a', skin: '#f0c8a8' } },
+  { id: 'ebene', x: 11, y: 5, dir: 'left', name: 'Ébène', chat: true,
+    colors: { style: 'long', hair: '#3a2418', shirt: '#22222a', pants: '#4a4a6a', skin: '#f2cfb4' } },
+  { id: 'perle', x: 10, y: 4, dir: 'down', name: 'Perle', chat: true,
+    colors: { style: 'bangs', glasses: true, necklace: true, hair: '#7a5a3a', shirt: '#f4f4f0', pants: '#5a6a8a', skin: '#f0c8a8' } },
+];
+[...ROUTE_NPCS, ...CAVE_NPCS].forEach(n => { n.hx = n.x; n.hy = n.y; n.hdir = n.dir; });
+let NPCS = ROUTE_NPCS;
+// Affiches sur la paroi de la grotte (positions en pixels)
+const POSTERS = [
+  { src: 'assets/affiche1.png', x: 82, y: 18, name: 'Rubis' },
+  { src: 'assets/affiche2.png', x: 154, y: 18, name: 'Ébène' },
+  { src: 'assets/affiche3.png', x: 226, y: 18, name: 'Perle' },
+];
 const npcAt = (x, y) => NPCS.find(n => n.x === x && n.y === y);
 // Objets cachés : une étincelle à ramasser avec A (une seule fois par partie)
 const ITEMS = [
   { id: 'spark1', x: 11, y: 16, item: 'potion', qty: 1 },
 ];
 const ITEM_NAMES = { potion: 'Potion', ball: 'Ball' };
-const itemAt = (x, y) => G && ITEMS.find(i => i.x === x && i.y === y && !G.flags[i.id]);
+const itemAt = (x, y) => G && ITEMS.find(i => (i.map || 'route') === curMap && i.x === x && i.y === y && !G.flags[i.id]);
 const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y) && !itemAt(x, y);
 
 const TIPS = [
@@ -478,6 +557,14 @@ function drawCreature(g, L) {
       L.eyes = [[15, 17], [23, 17]];
       break;
     }
+    case 'stalag':
+      E(6, 27, 3, 2, c1); E(34, 27, 3, 2, c1);
+      P([20, 2, 33, 36, 7, 36], c1);
+      P([20, 2, 24, 14, 17, 14], c2);
+      P([15, 15, 25, 15, 26, 17, 14, 17], L.c3); P([11, 30, 29, 30, 30, 32, 10, 32], L.c3);
+      E(14, 37, 3, 2, c1); E(26, 37, 3, 2, c1);
+      L.eyes = [[16, 22], [22, 22]];
+      break;
     case 'ghost':
       E(20, 17, 12, 12, c1); P([8, 17, 32, 17, 32, 30, 8, 30], c1);
       P([8, 29, 8, 37, 12, 33, 16, 38, 20, 33, 24, 38, 28, 33, 32, 37, 32, 29], c1);
@@ -548,7 +635,10 @@ function drawPerson(g, x, y, dir, step, c) {
   if (c.cape && dir !== 'down') r(3, 8, 10, 6, c.cape);
   r(4, 8, 8, 5, c.shirt); r(3, 8, 1, 4, c.skin); r(12, 8, 1, 4, c.skin);
   if (c.cape && dir === 'down') { r(3, 8, 1, 6, c.cape); r(12, 8, 1, 6, c.cape); }
+  if (c.tank) { r(4, 8, 1, 1, c.skin); r(11, 8, 1, 1, c.skin); }
+  if (c.necklace && dir === 'down') r(7, 9, 2, 1, '#e8c040');
   r(4, 2, 8, 6, c.skin);
+  if (c.style) return drawHair(r, dir, c);
   if (dir === 'up') r(4, 2, 8, 6, c.hair);
   else if (dir === 'down') { r(4, 2, 8, 2, c.hair); r(4, 4, 1, 2, c.hair); r(11, 4, 1, 2, c.hair); r(6, 5, 1, 2, '#222'); r(9, 5, 1, 2, '#222'); }
   else if (dir === 'left') { r(4, 2, 8, 2, c.hair); r(9, 2, 3, 5, c.hair); r(5, 5, 1, 2, '#222'); }
@@ -557,6 +647,23 @@ function drawPerson(g, x, y, dir, step, c) {
     r(3, 0, 10, 3, c.hat); r(6, 1, 4, 1, '#fff');
     if (dir === 'down') r(4, 3, 8, 1, c.hat); else if (dir === 'left') r(1, 2, 4, 1, c.hat); else if (dir === 'right') r(11, 2, 4, 1, c.hat);
   }
+}
+function drawHair(r, dir, c) {
+  const h = c.hair, eye = '#222';
+  const eyes = () => { if (dir === 'down') { r(6, 5, 1, 2, eye); r(9, 5, 1, 2, eye); } else if (dir === 'left') r(5, 5, 1, 2, eye); else if (dir === 'right') r(10, 5, 1, 2, eye); };
+  if (c.style === 'bun') { // cheveux tirés en arrière + chignon
+    if (dir === 'up') { r(4, 2, 8, 5, h); r(6, 0, 4, 3, h); }
+    else { r(4, 1, 8, 2, h); r(6, 0, 4, 1, h); if (dir === 'left') r(10, 2, 3, 3, h); if (dir === 'right') r(3, 2, 3, 3, h); if (dir === 'down') { r(4, 3, 1, 1, h); r(11, 3, 1, 1, h); } }
+    if (c.earrings) { if (dir !== 'right') r(3, 6, 1, 2, '#e8c040'); if (dir !== 'left') r(12, 6, 1, 2, '#e8c040'); }
+  } else { // cheveux longs (avec ou sans frange)
+    const top = c.style === 'bangs' ? 3 : 2;
+    if (dir === 'up') { r(3, 2, 10, 9, h); }
+    else if (dir === 'down') { r(4, 2, 8, top, h); r(3, 3, 2, 8, h); r(11, 3, 2, 8, h); if (c.style === 'long') r(8, 2, 1, 1, c.skin); }
+    else if (dir === 'left') { r(4, 2, 8, top, h); r(8, 2, 4, 9, h); }
+    else { r(4, 2, 8, top, h); r(4, 2, 4, 9, h); }
+    if (c.glasses) { r(4, 1, 8, 1, '#1a1a1a'); if (dir === 'down') { r(5, 1, 2, 1, '#8ab8d8'); r(9, 1, 2, 1, '#8ab8d8'); } }
+  }
+  eyes();
 }
 const HERO = { hat: '#e03848', hair: '#6a3a1a', shirt: '#3a6ad8', pants: '#2a2a48', skin: '#f6d2b0' };
 const personCache = {};
@@ -613,14 +720,56 @@ function drawTile(g, ch, x, y, fr) {
     case 'D': wall(); r(3, 3, 10, 13, '#5a3418'); r(4, 4, 8, 12, '#9a6038'); r(10, 10, 1, 1, '#ffd23f'); break;
     case 'P': wall(); r(2, 2, 12, 14, '#34508a'); r(3, 3, 10, 13, '#a8e0ff'); r(7, 3, 1, 13, '#34508a'); r(6, 5, 4, 1, '#e03a3a'); r(7, 4, 2, 3, '#e03a3a'); break;
     case 'X': wall(); r(3, 3, 10, 13, '#3a1a5a'); r(4, 4, 8, 12, '#7a4aa8'); r(7, 6, 2, 2, '#ffd23f'); break;
+    case 'k': // falaise rocheuse
+      grass(); r(0, 0, 16, 16, '#8a8478'); r(1, 2, 6, 5, '#a29c90'); r(9, 8, 6, 6, '#a29c90'); r(0, 7, 16, 1, '#6a6458'); r(7, 0, 1, 7, '#6a6458'); r(8, 8, 1, 8, '#6a6458'); break;
+    case 'K': // entrée de grotte
+      r(0, 0, 16, 16, '#8a8478'); r(1, 1, 5, 3, '#a29c90'); r(2, 5, 12, 11, '#1a1418'); r(3, 3, 10, 2, '#1a1418'); r(5, 2, 6, 1, '#1a1418'); r(3, 13, 10, 3, '#2a2228'); break;
+    case 'w': r(0, 0, 16, 16, '#1c1418'); if ((x + y) % 3 === 0) r(5, 6, 2, 2, '#2a2024'); break;
+    case 'W': {
+      r(0, 0, 16, 16, '#6e5a4a'); r(0, 0, 16, 1, '#5a4838');
+      if ((x * 5 + y * 3) % 4 === 0) { r(2, 3, 5, 3, '#806a58'); r(9, 9, 4, 3, '#5e4c3e'); } else { r(8, 2, 6, 3, '#806a58'); r(1, 10, 5, 3, '#5e4c3e'); }
+      if (tileAt(x, y + 1) !== 'W') r(0, 13, 16, 3, '#4a3a2e');
+      break;
+    }
+    case 'o': r(0, 0, 16, 16, '#9a8670'); if ((x * 7 + y * 11) % 3 === 0) { r(3, 4, 2, 1, '#857260'); r(11, 11, 2, 1, '#857260'); r(12, 3, 1, 1, '#b09c84'); } break;
+    case ';':
+      r(0, 0, 16, 16, '#7c8a64');
+      for (const bx of [0, 8]) for (const by of [0, 8]) { r(bx + 1, by + 3, 2, 5, '#3e6a44'); r(bx + 3, by + 1, 2, 7, '#335a3a'); r(bx + 5, by + 3, 2, 5, '#3e6a44'); r(bx + 3, by + 2, 1, 3, '#6aa070'); }
+      break;
+    case 'r': r(0, 0, 16, 16, '#9a8670'); r(2, 4, 12, 10, '#6e6660'); r(3, 3, 10, 1, '#6e6660'); r(4, 5, 5, 3, '#8e8680'); r(2, 13, 12, 2, '#544c46'); break;
+    case 'E': r(0, 0, 16, 16, '#9a8670'); r(0, 1, 7, 15, '#e8f4d0'); r(7, 3, 3, 13, '#c8d8b0'); r(10, 6, 2, 10, '#b0b89a'); break;
     case 'S': grass(); r(7, 9, 2, 6, '#7a4a2a'); r(2, 2, 12, 8, '#6a3a1a'); r(3, 3, 10, 6, '#c8945a'); r(4, 5, 8, 1, '#8a5a2a'); r(4, 7, 6, 1, '#8a5a2a'); break;
   }
 }
-const mapFrames = [0, 1].map(fr => {
+const buildFrames = () => [0, 1].map(fr => {
   const [c, g] = newCanvas(MW * 16, MH * 16);
   for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) { g.save(); g.translate(x * 16, y * 16); drawTile(g, MAP[y][x], x, y, fr); g.restore(); }
   return c;
 });
+const MAPS = {
+  route: { src: MAP_SRC, npcs: ROUTE_NPCS, fill: 'T' },
+  cave: { src: CAVE_SRC, npcs: CAVE_NPCS, fill: 'w', dark: true },
+};
+let mapFrames = buildFrames();
+MAPS.route.frames = mapFrames;
+function loadMap(id) {
+  if (!MAPS[id]) id = 'route';
+  const m = MAPS[id];
+  curMap = id; MW = id === 'route' ? 30 : Math.max(...m.src.map(r => r.length)); MH = m.src.length;
+  MAP = m.src.map(r => r.padEnd(MW, m.fill).slice(0, MW));
+  NPCS = m.npcs;
+  mapFrames = m.frames || (m.frames = buildFrames());
+}
+// Les affiches : photo réduite puis « posterisée » pour un rendu pixel art
+function posterize(img) {
+  const [c, g] = newCanvas(32, 40);
+  g.drawImage(img, 0, 0, 32, 40);
+  const d = g.getImageData(0, 0, 32, 40);
+  for (let i = 0; i < d.data.length; i += 4) for (let k = 0; k < 3; k++) d.data[i + k] = Math.round(d.data[i + k] / 255 * 5) / 5 * 255;
+  g.putImageData(d, 0, 0);
+  return c;
+}
+POSTERS.forEach(p => { const img = new Image(); img.onload = () => { p.canvas = posterize(img); }; img.src = p.src; });
 
 // ---------- État du jeu ----------
 let G = null;            // partie sauvegardée
@@ -860,13 +1009,15 @@ function sees(n) {
   }
   return false;
 }
-function stepTo(x, y) { if (tileAt(x, y) === ',') sfx.grass(); P.fx = G.x; P.fy = G.y; G.x = x; G.y = y; P.moving = true; P.t = 0; P.step = P.step === 1 ? 2 : 1; }
+function stepTo(x, y) { if (GRASS.has(tileAt(x, y))) sfx.grass(); P.fx = G.x; P.fy = G.y; G.x = x; G.y = y; P.moving = true; P.t = 0; P.step = P.step === 1 ? 2 : 1; }
 function onStep() {
   const ch = tileAt(G.x, G.y);
+  if (ch === 'K') return runEvent(() => warp('cave', 1, 7, 'right'));
+  if (ch === 'E' && curMap === 'cave') return runEvent(() => warp('route', 28, 22, 'left'));
   if (ch === 'P' || ch === 'D') return runEvent(() => healEvent(ch));
   const t = NPCS.find(n => n.trainer && !G.flags[n.id] && sees(n));
   if (t) return runEvent(() => trainerBattle(t));
-  if (ch === ',' && Math.random() < 0.12) runEvent(wildBattle);
+  if (GRASS.has(ch) && Math.random() < 0.12) runEvent(wildBattle);
 }
 let lastBump = 0;
 function updateWorld(dt) {
@@ -890,6 +1041,10 @@ function interact() {
   if (it) return runEvent(() => pickUp(it));
   const ch = tileAt(tx, ty);
   if (ch === 'S') return runEvent(() => say(SIGNS[`${tx},${ty}`] || '...'));
+  if (ch === 'W' && curMap === 'cave') {
+    const px = tx * 16 + 8, poster = POSTERS.find(p => px >= p.x - 4 && px <= p.x + 36);
+    return runEvent(() => say(poster ? `Une affiche : « ${poster.name}, star de la Grotte ». Elle a l'air très fière de son portrait !` : 'La paroi est fraîche et humide.'));
+  }
   if (ch === 'X') return runEvent(() => say(G.flags.champ ? 'L\'Arène. Ton portrait de Champion·ne est accroché à l\'entrée !' : 'Arène de la région. Le Champion Orion en garde l\'entrée.'));
 }
 async function pickUp(it) {
@@ -898,7 +1053,19 @@ async function pickUp(it) {
   sfx.item(); save(); renderIdle();
   await say(`Tu ramasses l'étincelle... Tu as trouvé ${it.qty > 1 ? it.qty + ' ' : 'une '}${ITEM_NAMES[it.item]} !`);
 }
+const CHATS = [
+  ['Rubis : Vous avez vu ? On a nos affiches dans la grotte !', 'Ébène : Trop la classe. Même les Caillouton viennent les admirer.', 'Perle : Normal, on est les stars de Lily Quest !'],
+  ['Perle : Quelqu\'un a vu mes lunettes ?', 'Rubis : ... Elles sont sur ta tête, Perle.', 'Perle : Ah oui ! Merci !'],
+  ['Ébène : Aujourd\'hui, je capture un Stalagmo. J\'en suis sûre.', 'Rubis : Tu dis ça tous les jours !', 'Perle : Et tous les jours, c\'est un Caillouton qui sort.'],
+  ['Rubis : Ce soir, on code la suite du jeu ?', 'Ébène : Oui ! J\'ai plein d\'idées de Monstres.', 'Perle : Moi je m\'occupe de la musique !'],
+];
+async function chat(n) {
+  await say('Les trois dresseuses sont en pleine discussion...');
+  for (const line of pick(CHATS)) await say(line);
+  await say(`${n.name} : Oh, salut ${G.name} ! On papote, pas de combat aujourd'hui !`);
+}
 async function talk(n) {
+  if (n.chat) return chat(n);
   n.dir = OPP[G.dir];
   if (n.trainer && !G.flags[n.id]) return trainerBattle(n);
   if (n.id === 'prof') {
@@ -933,7 +1100,16 @@ async function healEvent(ch) {
   save();
   G.dir = 'down'; stepTo(G.x, G.y + 1);
 }
+async function warp(map, x, y, dir) {
+  sfx.door();
+  for (let i = 1; i <= 6; i++) { overlay = `rgba(0,0,0,${i / 6})`; await wait(35); }
+  G.map = map; loadMap(map); G.x = x; G.y = y; G.dir = dir; P.moving = false;
+  save(); await wait(150);
+  for (let i = 5; i >= 0; i--) { overlay = i ? `rgba(0,0,0,${i / 6})` : null; await wait(35); }
+  if (map === 'cave' && !G.flags.caveSeen) { G.flags.caveSeen = 1; await say('Une grotte fraîche et humide... Des voix et des rires résonnent au fond !'); }
+}
 function wildFor(x, y) {
+  if (curMap === 'cave') return [pick(['caillouton', 'caillouton', 'stalagmo', 'stalagmo', 'fantomi', 'ratounet']), rand(6, 11)];
   if (y <= 7) return [pick(['fantomi', 'fantomi', 'voltacelle', 'caillouton', 'piouli', 'ratounet']), rand(11, 15)];
   if (y >= 14) return [pick(['ratounet', 'ratounet', 'piouli', 'piouli', 'caillouton', 'feuillon']), rand(2, 4)];
   return [pick(['ratounet', 'piouli', 'voltacelle', 'caillouton', 'voltacelle', 'aquapin', 'flamiaou', 'feuillon', 'ticketou', 'ticketou']), rand(4, 8)];
@@ -943,7 +1119,7 @@ async function wildBattle() {
   await battle([makeMon(id, l)], null);
 }
 async function trainerBattle(n) {
-  n.alert = true; sfx.alert(); await wait(800); n.alert = false;
+  musicOverride = 'spotted'; n.alert = true; sfx.alert(); await wait(800); n.alert = false;
   while (Math.abs(n.x - G.x) + Math.abs(n.y - G.y) > 1) {
     n.x += Math.sign(G.x - n.x); n.y += Math.sign(G.y - n.y); await wait(170);
   }
@@ -1055,7 +1231,7 @@ const hpSynced = () => B.dispE === B.enemy.hp && B.dispM === G.team[B.mi].hp;
 
 async function battle(enemyTeam, trainer) {
   await transition();
-  mode = 'battle'; topScene = 'battle';
+  mode = 'battle'; topScene = 'battle'; musicOverride = null;
   const fresh = () => ({ dx: 0, dy: 0, vis: true, alpha: 1, scale: 1 });
   B = { enemyTeam, ei: 0, trainer, enemy: enemyTeam[0], mi: G.team.findIndex(m => m.hp > 0), e: fresh(), m: { ...fresh(), vis: false }, ball: null, evo: null, showE: true, showM: false };
   B.dispE = B.enemy.hp; B.dispM = G.team[B.mi].hp;
@@ -1081,7 +1257,7 @@ async function battle(enemyTeam, trainer) {
     for (const m of G.team) { const ev = SPECIES[m.id].evo; if (ev && m.lvl >= ev[0] && m.hp > 0) await evolve(m, ev[1]); }
   }
   overlay = '#000'; await wait(250);
-  if (res === 'lose') { healAll(); G.x = 23; G.y = 22; G.dir = 'down'; P.moving = false; }
+  if (res === 'lose') { healAll(); G.map = 'route'; loadMap('route'); G.x = 23; G.y = 22; G.dir = 'down'; P.moving = false; }
   B = null; topScene = 'world'; mode = 'event'; overlay = null;
   save(); renderIdle();
   return res;
@@ -1182,7 +1358,7 @@ async function enemyFainted() {
   const sum = SPECIES[en.id].base.reduce((a, b) => a + b, 0);
   const gain = Math.floor((30 + sum / 6) * en.lvl / 4 * (B.trainer ? 1.5 : 1));
   const last = !B.trainer || B.ei + 1 >= B.enemyTeam.length;
-  if (last) await wait(B.trainer ? sfx.victory() : sfx.winWild());
+  if (last) { B.won = true; await wait(700); }
   await giveXp(G.team[B.mi], gain);
   B.ei++;
   if (B.trainer && B.ei < B.enemyTeam.length) {
@@ -1290,7 +1466,14 @@ function drawWorld(g) {
   const px = P.moving ? P.fx + (G.x - P.fx) * P.t : G.x, py = P.moving ? P.fy + (G.y - P.fy) * P.t : G.y;
   const camX = clamp(Math.round(px * 16 + 8 - 128), 0, MW * 16 - 256), camY = clamp(Math.round(py * 16 + 8 - 96), 0, MH * 16 - 192);
   g.drawImage(mapFrames[Math.floor(tick / 500) % 2], camX, camY, 256, 192, 0, 0, 256, 192);
-  for (const it of ITEMS) if (!G.flags[it.id]) drawSparkle(g, it.x * 16 - camX, it.y * 16 - camY);
+  for (const it of ITEMS) if ((it.map || 'route') === curMap && !G.flags[it.id]) drawSparkle(g, it.x * 16 - camX, it.y * 16 - camY);
+  if (curMap === 'cave') for (const p of POSTERS) {
+    const x = p.x - camX, y = p.y - camY;
+    g.fillStyle = '#2a1e14'; g.fillRect(x - 3, y - 3, 38, 46);
+    g.fillStyle = '#f4ecd8'; g.fillRect(x - 2, y - 2, 36, 44);
+    if (p.canvas) g.drawImage(p.canvas, x, y); else { g.fillStyle = '#c8b8a0'; g.fillRect(x, y, 32, 40); }
+    g.fillStyle = '#e03848'; g.fillRect(x + 15, y - 4, 2, 2);
+  }
   const ents = NPCS.map(n => ({ y: n.y, draw: n.pal
     ? () => drawPal(g, n, n.x * 16 - camX, n.y * 16 - camY)
     : () => drawPerson(g, n.x * 16 - camX, n.y * 16 - camY - 3, n.dir, 0, n.colors) }));
@@ -1299,7 +1482,19 @@ function drawWorld(g) {
   ents.sort((a, b) => a.y - b.y).forEach(e => e.draw());
   // Les hautes herbes cachent les pieds
   const gx = Math.round(px), gy = Math.round(py);
-  if (tileAt(gx, gy) === ',' && (!P.moving || P.t > 0.5)) g.drawImage(mapFrames[0], gx * 16, gy * 16 + 9, 16, 7, gx * 16 - camX, gy * 16 - camY + 9, 16, 7);
+  if (GRASS.has(tileAt(gx, gy)) && (!P.moving || P.t > 0.5)) g.drawImage(mapFrames[0], gx * 16, gy * 16 + 9, 16, 7, gx * 16 - camX, gy * 16 - camY + 9, 16, 7);
+  const chatters = NPCS.filter(n => n.chat);
+  if (chatters.length) {
+    const n = chatters[Math.floor(tick / 1300) % chatters.length], x = n.x * 16 - camX + 3, y = n.y * 16 - camY - 16;
+    g.fillStyle = '#2c3a50'; g.fillRect(x - 1, y - 1, 14, 10); g.fillStyle = '#ffffff'; g.fillRect(x, y, 12, 8); g.fillRect(x + 2, y + 8, 2, 2);
+    for (let i = 0; i <= Math.floor(tick / 300) % 3; i++) { g.fillStyle = '#2c3a50'; g.fillRect(x + 2 + i * 3, y + 3, 2, 2); }
+  }
+  if (MAPS[curMap].dark) {
+    const cx = Math.round(px * 16) - camX + 8, cy = Math.round(py * 16) - camY + 6;
+    const shade = g.createRadialGradient(cx, cy, 40, cx, cy, 190);
+    shade.addColorStop(0, 'rgba(12,8,24,0)'); shade.addColorStop(1, 'rgba(12,8,24,.6)');
+    g.fillStyle = shade; g.fillRect(0, 0, 256, 192);
+  }
   for (const n of NPCS) if (n.alert) {
     const x = n.x * 16 - camX + 3, y = n.y * 16 - camY - 16;
     g.fillStyle = '#222'; g.fillRect(x - 1, y - 1, 12, 13); g.fillStyle = '#fff'; g.fillRect(x, y, 10, 11);
@@ -1360,12 +1555,18 @@ function drawBattle(g) {
     return;
   }
   const sky = g.createLinearGradient(0, 0, 0, 192);
-  sky.addColorStop(0, '#8fd0ff'); sky.addColorStop(0.48, '#e6f6ff'); sky.addColorStop(0.48, '#b4e088'); sky.addColorStop(1, '#78c058');
+  const inCave = curMap === 'cave';
+  if (inCave) { sky.addColorStop(0, '#2a2028'); sky.addColorStop(0.48, '#5a4a40'); sky.addColorStop(0.48, '#8a7660'); sky.addColorStop(1, '#6a5848'); }
+  else { sky.addColorStop(0, '#8fd0ff'); sky.addColorStop(0.48, '#e6f6ff'); sky.addColorStop(0.48, '#b4e088'); sky.addColorStop(1, '#78c058'); }
   g.fillStyle = sky; g.fillRect(0, 0, 256, 192);
-  ell(g, 40 + (tick / 80) % 300 - 40, 22, 18, 6, 'rgba(255,255,255,.9)');
-  ell(g, 200 - (tick / 120) % 300 + 60, 38, 14, 5, 'rgba(255,255,255,.8)');
-  ell(g, 192, 79, 48, 11, '#5ea844'); ell(g, 192, 78, 44, 9, '#8ad468');
-  ell(g, 64, 137, 56, 13, '#5ea844'); ell(g, 64, 136, 52, 11, '#8ad468');
+  if (inCave) { for (let i = 0; i < 6; i++) poly(g, [20 + i * 45, 0, 30 + i * 45, 0, 25 + i * 45, 14 + (i % 3) * 6], '#3a2e2c'); }
+  else {
+    ell(g, 40 + (tick / 80) % 300 - 40, 22, 18, 6, 'rgba(255,255,255,.9)');
+    ell(g, 200 - (tick / 120) % 300 + 60, 38, 14, 5, 'rgba(255,255,255,.8)');
+  }
+  const [pd, pl] = inCave ? ['#4a3c32', '#7a6a58'] : ['#5ea844', '#8ad468'];
+  ell(g, 192, 79, 48, 11, pd); ell(g, 192, 78, 44, 9, pl);
+  ell(g, 64, 137, 56, 13, pd); ell(g, 64, 136, 52, 11, pl);
   const e = B.e, m = B.m;
   if (e.vis) drawMon(g, B.enemy.id, 152 + e.dx, 2 + e.dy, { alpha: e.alpha, scale: e.scale, white: e.white });
   if (m.vis && B.showM) drawMon(g, G.team[B.mi].id, 24 + m.dx, 58 + m.dy, { flip: true, alpha: m.alpha, scale: m.scale });
@@ -1399,7 +1600,7 @@ function drawIntro(g) {
   ell(g, 128, 130, 70, 12, 'rgba(0,0,0,.08)');
   if (introPick) drawMon(g, introPick, 88, 50 + Math.sin(tick / 200) * 3);
   else {
-    g.drawImage(personCanvas('prof', NPCS[0].colors), 0, 0, 16, 16, 72, 50, 80, 80);
+    g.drawImage(personCanvas('prof', ROUTE_NPCS[0].colors), 0, 0, 16, 16, 72, 50, 80, 80);
     g.drawImage(sprite('petunia'), 146, 88 - Math.round(Math.max(0, Math.sin(tick / 180)) * 6), 44, 44);
   }
   drawDialog(g);
@@ -1436,7 +1637,7 @@ function loop(t) {
     const me = G.team[B.mi];
     if (me && me.hp > 0 && me.hp / stats(me).hp <= 0.2 && tick - (B.lastAlarm || 0) > 900) { B.lastAlarm = tick; sfx.lowHp(); }
   }
-  updateMusic(topScene === 'battle' ? 'battle' : topScene === 'world' ? 'world' : 'title');
+  updateMusic(songFor());
   render();
   requestAnimationFrame(loop);
 }
@@ -1463,6 +1664,8 @@ let toast = null;
 function toggleSound() {
   unlockAudio();
   soundOn = !soundOn;
+  // Couper le moteur audio lui-même garantit le silence total, même sur iPhone
+  try { if (audio) { if (soundOn) audio.resume(); else audio.suspend(); } } catch (e) { /* pas de son */ }
   try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch (e) { /* stockage bloqué */ }
   toast = { text: soundOn ? '♪ Son activé' : 'Son coupé', until: tick + 1500 };
   if (soundOn) sfx.blip();
@@ -1527,7 +1730,7 @@ async function titleFlow() {
     if (!ok) return titleFlow();
   }
   if (v === 'cont') {
-    G = saved;
+    G = saved; loadMap(G.map || 'route');
     G.box ||= []; G.flags ||= {}; G.seen ||= {}; G.caught ||= {};
     topScene = 'world'; save(); renderIdle();
     await say(`Bon retour, ${G.name} !`);
@@ -1556,7 +1759,8 @@ async function newGame() {
     if (ok) starter = s;
     else introPick = null;
   }
-  G = { name, x: 5, y: 22, dir: 'down', team: [makeMon(starter, 5)], box: [], items: { ball: 5, potion: 3 }, flags: {}, seen: { [starter]: 1 }, caught: { [starter]: 1 } };
+  loadMap('route');
+  G = { name, map: 'route', x: 5, y: 22, dir: 'down', team: [makeMon(starter, 5)], box: [], items: { ball: 5, potion: 3 }, flags: {}, seen: { [starter]: 1 }, caught: { [starter]: 1 } };
   sfx.item();
   await say(`Tu reçois ${SPECIES[starter].name} ! Prends-en bien soin.`);
   await say('Le Champion Orion t\'attend tout au nord. Passe me voir près de chez toi, j\'ai un cadeau !');

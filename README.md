@@ -5,6 +5,8 @@ Un petit RPG de capture de monstres façon console DS, jouable dans le navigateu
 - Deux écrans : le monde et les combats en haut, les menus tactiles en bas
 - 12 Monstres originaux, 7 types, évolutions au niveau 16
 - Hautes herbes, captures, dresseurs, Centre de soin et un Champion à battre
+- Une grotte secrète (à droite du Centre) avec des Monstres Roche, des affiches et trois dresseuses qui papotent
+- Une musique par situation : titre, route, grotte, combat sauvage, dresseur, Champion, victoire, évolution
 - Comptes joueurs (pseudo + mot de passe) : chacun a sa partie, sauvegardée en ligne
 - Mode « sans compte » : sauvegarde sur l'appareil uniquement
 
