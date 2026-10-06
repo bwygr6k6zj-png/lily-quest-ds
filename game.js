@@ -25,27 +25,105 @@ function unlockAudio() {
   } catch (e) { /* pas de son, tant pis */ }
 }
 ['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlockAudio, true));
-function beep(freq = 660, dur = 0.06, type = 'square', vol = 0.05, slide = 0) {
+// Petits outils de synthèse : une note (avec glissé ou vibrato) et un souffle de bruit filtré
+function tone(freq, start = 0, dur = 0.1, { type = 'square', vol = 0.05, to = null, vib = 0 } = {}) {
   if (!soundOn || !audio) return;
   try {
-    const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+    const t = audio.currentTime + start, o = audio.createOscillator(), g = audio.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t);
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur);
+    if (to) o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
+    if (vib) {
+      const lfo = audio.createOscillator(), depth = audio.createGain();
+      lfo.frequency.value = vib; depth.gain.value = freq * 0.04;
+      lfo.connect(depth).connect(o.frequency); lfo.start(t); lfo.stop(t + dur);
+    }
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.02);
   } catch (e) { /* pas de son, tant pis */ }
 }
-const tune = (notes, gap, dur, type = 'square', vol = 0.05) => notes.forEach((f, i) => setTimeout(() => beep(f, dur, type, vol), i * gap));
+let noiseBuf = null;
+function noise(start = 0, dur = 0.1, { vol = 0.08, freq = 1000, to = null, q = 1, type = 'bandpass' } = {}) {
+  if (!soundOn || !audio) return;
+  try {
+    if (!noiseBuf) {
+      noiseBuf = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
+      const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const t = audio.currentTime + start, src = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = type; f.frequency.setValueAtTime(freq, t); if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur); f.Q.value = q;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(audio.destination); src.start(t); src.stop(t + dur + 0.02);
+  } catch (e) { /* pas de son, tant pis */ }
+}
+const beep = (freq = 660, dur = 0.06, type = 'square', vol = 0.05, slide = 0) => tone(freq, 0, dur, { type, vol, to: slide ? freq + slide : null });
+// Petite mélodie (même notation que la musique) : la musique de fond se tait le temps du jingle, comme dans Pokémon
+let duckUntil = 0;
+function jingle(lead, bpm, bass = '', { type = 'square', vol = 0.05 } = {}) {
+  if (!soundOn || !audio) return 0;
+  const step = 60 / bpm / 2;
+  const play = (str, wave, v) => { let t = 0; for (const [f, d] of parseNotes(str)) { if (f) tone(f, t, d * step * 0.92, { type: wave, vol: v }); t += d * step; } return t; };
+  const len = Math.max(play(lead, type, vol), bass ? play(bass, 'triangle', 0.09) : 0);
+  duckUntil = Math.max(duckUntil, performance.now() + len * 1000 + 200);
+  return len * 1000;
+}
+// Cri du Monstre : toujours le même pour une espèce, plus grave pour les formes évoluées
+function cry(id, pitch = 1) {
+  let h = 7; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const sp = SPECIES[id], base = (320 + (h % 480)) * pitch * (sp && sp.look && sp.look.big ? 0.7 : 1);
+  const wave = ['square', 'sawtooth', 'triangle'][h % 3];
+  tone(base, 0, 0.12, { type: wave, vol: 0.05, to: base * (1.3 + ((h >> 3) % 5) * 0.15) });
+  tone(base * 1.4, 0.1, 0.2, { type: wave, vol: 0.045, to: base * 0.6, vib: 18 + ((h >> 5) % 30) });
+  tone(base * 0.85, 0.28, 0.22, { type: 'square', vol: 0.035, to: base * 0.5 });
+}
 const sfx = {
-  blip: () => beep(880, 0.05),
-  hit: () => beep(220, 0.18, 'sawtooth', 0.08, -150),
-  bump: () => beep(110, 0.06, 'square', 0.04),
-  heal: () => tune([523, 659, 784, 1046], 110, 0.12, 'triangle', 0.08),
-  level: () => tune([523, 659, 784, 659, 1046], 90, 0.1),
-  catch: () => tune([784, 988, 1175, 1568], 140, 0.15, 'triangle', 0.08),
-  encounter: () => tune([440, 415, 440, 415, 440, 523, 587], 70, 0.07),
-  shake: () => beep(300, 0.08, 'triangle', 0.07),
-  alert: () => tune([988, 1319], 80, 0.08),
+  blip: () => tone(1320, 0, 0.04, { vol: 0.035 }),
+  menu: () => { tone(988, 0, 0.04, { vol: 0.04 }); tone(1480, 0.04, 0.06, { vol: 0.04 }); },
+  bump: () => tone(95, 0, 0.09, { vol: 0.07, to: 60 }),
+  grass: () => { noise(0, 0.13, { freq: 3500, q: 0.7, vol: 0.07, type: 'highpass' }); noise(0.06, 0.09, { freq: 5500, vol: 0.05, type: 'highpass' }); },
+  door: () => { noise(0, 0.12, { freq: 400, vol: 0.14, type: 'lowpass' }); tone(220, 0.06, 0.12, { type: 'triangle', vol: 0.07, to: 130 }); },
+  // Rencontre sauvage : tourbillon + souffle qui monte
+  encounter: () => { for (let i = 0; i < 12; i++) tone(1400 - i * 80, i * 0.03, 0.05, { vol: 0.04 }); noise(0, 0.55, { freq: 300, to: 5000, vol: 0.06 }); },
+  // Un dresseur te repère : « ! » puis petit thème
+  alert: () => { tone(1568, 0, 0.07, { vol: 0.06 }); tone(2093, 0.08, 0.16, { vol: 0.06 }); jingle('. . . E5 E5 G5 E5 A5*2 G5 E5*2', 230, '. . . A2*2 A2*2 C3*2 E3*2'); },
+  heal: () => jingle('C5 E5 G5 C6 . G5 C6*3 . E6*4', 190, 'C3*4 G3*4 C3*4 . . . .', { type: 'triangle', vol: 0.09 }),
+  potion: () => { [784, 988, 1175, 1568, 1976, 2349].forEach((f, i) => tone(f, i * 0.05, 0.12, { type: 'sine', vol: 0.06 })); },
+  item: () => jingle('G5 G5 G5 C6*2 . E6*4', 210, 'C3*2 C3*2 E3*2 G3*4', { vol: 0.05 }),
+  save: () => jingle('E5 G5 C6*2', 260, '', { type: 'triangle', vol: 0.07 }),
+  level: () => jingle('C5 E5 G5 C6 E6*2 C6*3', 230, 'C3*2 G3*2 C4*5', { vol: 0.05 }),
+  learn: () => jingle('G5 A5 B5 D6*3', 260, '', { vol: 0.045 }),
+  // Attaques : un son par type
+  attack: type => {
+    switch (type) {
+      case 'Feu': noise(0, 0.45, { freq: 500, to: 3000, q: 0.6, vol: 0.13, type: 'lowpass' }); for (let i = 0; i < 6; i++) noise(i * 0.07, 0.04, { freq: 3500, vol: 0.07, type: 'highpass' }); break;
+      case 'Eau': for (let i = 0; i < 7; i++) { const f = 400 + Math.random() * 500; tone(f, i * 0.055, 0.08, { type: 'sine', vol: 0.09, to: f * 2.4 }); } break;
+      case 'Plante': noise(0, 0.18, { freq: 4500, to: 700, q: 2, vol: 0.12 }); tone(1400, 0, 0.16, { type: 'triangle', vol: 0.06, to: 300 }); break;
+      case 'Élec': tone(90, 0, 0.4, { type: 'sawtooth', vol: 0.08, vib: 45 }); for (let i = 0; i < 7; i++) tone(1500 + Math.random() * 1800, i * 0.05, 0.04, { vol: 0.04 }); break;
+      case 'Roche': for (let i = 0; i < 3; i++) noise(i * 0.1, 0.16, { freq: 220, vol: 0.2, type: 'lowpass' }); tone(130, 0, 0.32, { type: 'triangle', vol: 0.11, to: 50 }); break;
+      case 'Spectre': tone(300, 0, 0.55, { type: 'sine', vol: 0.09, to: 900, vib: 7 }); tone(306, 0, 0.55, { type: 'sine', vol: 0.06, to: 860, vib: 5 }); break;
+      default: noise(0, 0.22, { freq: 500, to: 3500, q: 1.5, vol: 0.13 });
+    }
+  },
+  // Impact : plus fort si c'est super efficace
+  hit: (e = 1) => {
+    const v = e > 1 ? 0.22 : e < 1 ? 0.07 : 0.14;
+    noise(0, e > 1 ? 0.32 : 0.18, { freq: e > 1 ? 1600 : 900, to: 150, vol: v, type: 'lowpass' });
+    tone(e > 1 ? 240 : 170, 0, 0.15, { vol: v * 0.4, to: 60 });
+    if (e > 1) tone(1320, 0.06, 0.12, { vol: 0.04, to: 660 });
+  },
+  miss: () => noise(0, 0.25, { freq: 3000, to: 600, vol: 0.06 }),
+  faint: () => tone(700, 0.35, 0.65, { vol: 0.05, to: 70 }),
+  pop: () => { noise(0, 0.08, { freq: 2500, vol: 0.08 }); tone(500, 0, 0.12, { type: 'triangle', vol: 0.07, to: 1200 }); },
+  throw: () => { noise(0, 0.3, { freq: 700, to: 4500, vol: 0.07 }); tone(380, 0, 0.3, { type: 'triangle', vol: 0.04, to: 1300 }); },
+  absorb: () => tone(1500, 0, 0.25, { type: 'sine', vol: 0.07, to: 180 }),
+  shake: () => { tone(260, 0, 0.06, { vol: 0.06 }); noise(0, 0.05, { freq: 1500, vol: 0.07 }); },
+  breakout: () => { tone(300, 0, 0.16, { vol: 0.06, to: 1300 }); noise(0, 0.16, { freq: 2200, vol: 0.09 }); },
+  catch: () => jingle('C5 C5 C5 . E5 G5 . E5 G5*4', 250, 'C3*2 C3*2 G2*2 C3*4', { vol: 0.05 }),
+  run: () => { noise(0, 0.35, { freq: 4500, to: 300, vol: 0.08 }); tone(900, 0, 0.3, { vol: 0.03, to: 200 }); },
+  winWild: () => jingle('G5 C6 E6 G6*3 E6 G6*4', 240, 'C3*2 E3*2 G3*2 C4*6', { vol: 0.045 }),
+  victory: () => jingle('G5 G5 G5 G5*2 E5*2 F5*2 G5*2 . F5 G5*6', 200, 'C3*2 C3*2 C3*2 C3*2 A2*2 A2*2 B2*2 B2*2 C3*6', { vol: 0.05 }),
+  evolved: () => jingle('C5 E5 G5 C6 . G5 C6 E6*2 G6*6', 210, 'C3*4 G2*4 C3*8', { vol: 0.05 }),
+  lowHp: () => { tone(1175, 0, 0.08, { vol: 0.022 }); tone(988, 0.11, 0.08, { vol: 0.022 }); },
 };
 
 // Musique : mélodies originales. Notes en croches ; « E5*2 » = 2 croches, « . » = silence, « | » = barre de mesure.
@@ -115,6 +193,8 @@ function updateMusic(name) {
   const cur = music.playing && music.playing.name;
   if (!running || !name) { if (cur) stopMusic(); return; }
   if (cur !== name) { stopMusic(); startMusic(name); }
+  const p = music.playing, ducked = performance.now() < duckUntil;
+  if (p && ducked !== !!p.ducked) { p.ducked = ducked; p.out.gain.setTargetAtTime(ducked ? 0 : 1, audio.currentTime, ducked ? 0.03 : 0.25); }
 }
 
 // ---------- Données : types, attaques, espèces ----------
@@ -759,7 +839,7 @@ function sees(n) {
   }
   return false;
 }
-function stepTo(x, y) { P.fx = G.x; P.fy = G.y; G.x = x; G.y = y; P.moving = true; P.t = 0; P.step = P.step === 1 ? 2 : 1; }
+function stepTo(x, y) { if (tileAt(x, y) === ',') sfx.grass(); P.fx = G.x; P.fy = G.y; G.x = x; G.y = y; P.moving = true; P.t = 0; P.step = P.step === 1 ? 2 : 1; }
 function onStep() {
   const ch = tileAt(G.x, G.y);
   if (ch === 'P' || ch === 'D') return runEvent(() => healEvent(ch));
@@ -794,7 +874,7 @@ function interact() {
 async function pickUp(it) {
   G.flags[it.id] = 1;
   G.items[it.item] = (G.items[it.item] || 0) + it.qty;
-  sfx.catch(); save(); renderIdle();
+  sfx.item(); save(); renderIdle();
   await say(`Tu ramasses l'étincelle... Tu as trouvé ${it.qty > 1 ? it.qty + ' ' : 'une '}${ITEM_NAMES[it.item]} !`);
 }
 async function talk(n) {
@@ -802,7 +882,7 @@ async function talk(n) {
   if (n.trainer && !G.flags[n.id]) return trainerBattle(n);
   if (n.id === 'prof') {
     if (!G.flags.gift) {
-      G.flags.gift = 1; G.items.ball += 5; sfx.catch();
+      G.flags.gift = 1; G.items.ball += 5; sfx.item();
       await say('Prof. Lilas : Tiens, prends ces 5 Balls ! Affaiblis un Monstre sauvage, puis lance une Ball dans le Sac.');
     } else if (G.flags.champ) await say(`Prof. Lilas : ${G.name}, Champion·ne de la région ! Je suis si fier·e de toi !`);
     else await say(pick(TIPS));
@@ -811,13 +891,15 @@ async function talk(n) {
 }
 async function healEvent(ch) {
   if (ch === 'P') {
+    sfx.door();
     await say('Bienvenue au Centre Monstre ! Je soigne tes Monstres...');
-    healAll(); sfx.heal(); await wait(700);
+    healAll(); await wait(sfx.heal() + 150);
     if (G.items.ball < 5) { G.items.ball = 5; await say('Voilà, ils sont en pleine forme ! Et tiens : ton stock de Balls est rempli.'); }
     else await say('Voilà, ils sont en pleine forme ! À bientôt !');
   } else {
+    sfx.door();
     await say(`Maman : ${G.name} ! Tu as l'air épuisé·e. Repose-toi un peu...`);
-    healAll(); sfx.heal(); await wait(700);
+    healAll(); await wait(sfx.heal() + 150);
     await say('Maman : Voilà, toute l\'équipe est en forme. Bonne route !');
   }
   save();
@@ -847,7 +929,7 @@ async function trainerBattle(n) {
   }
 }
 async function ending() {
-  sfx.level();
+  sfx.victory();
   await say('Orion : Tu es le ou la nouvel·le Champion·ne de la région !');
   await say(`★ FÉLICITATIONS, ${G.name} ! ★`);
   const caught = Object.keys(G.caught).length;
@@ -859,6 +941,7 @@ async function ending() {
 function openMenu(which) {
   if (mode !== 'world' || P.moving) return;
   runEvent(async () => {
+    if (!which) sfx.menu();
     if (!which) which = await choose([
       { value: 'team', label: 'Équipe' }, { value: 'bag', label: 'Sac' },
       { value: 'dex', label: 'Dex' }, { value: 'save', label: 'Sauver' },
@@ -869,7 +952,7 @@ function openMenu(which) {
     else if (which === 'dex') await dexMenu();
     else if (which === 'save') {
       save();
-      const ok = await pushCloud(); sfx.heal();
+      const ok = await pushCloud(); sfx.save();
       await say(!account.user ? 'Partie sauvegardée sur cet appareil !' : ok ? 'Partie sauvegardée en ligne !' : 'Sauvegardée sur cet appareil, mais pas en ligne (connexion internet ?).');
     } else if (which === 'title') { save(); await pushCloud(); await titleFlow(); }
   });
@@ -901,7 +984,7 @@ async function bagMenu() {
     const i = await chooseMon('Soigner qui ?', m => m.hp > 0 && m.hp < stats(m).hp);
     if (i === 'back') continue;
     const m = G.team[i], before = m.hp;
-    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.heal();
+    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.potion();
     await say(`${nm(m)} récupère ${m.hp - before} PV !`);
   }
 }
@@ -935,7 +1018,7 @@ async function lunge(side) {
 }
 async function blink(side) { for (let i = 0; i < 6; i++) { B[side].vis = !B[side].vis; await wait(70); } B[side].vis = true; }
 async function faint(side) {
-  beep(400, 0.4, 'square', 0.05, -320);
+  cry(side === 'e' ? B.enemy.id : G.team[B.mi].id, 0.8); sfx.faint(); await wait(350);
   const s = B[side]; for (let i = 0; i < 20; i++) { s.dy += 3; s.alpha -= 0.05; await wait(20); }
   s.vis = false;
 }
@@ -951,6 +1034,7 @@ async function battle(enemyTeam, trainer) {
   markSeen(B.enemy.id);
   renderIdle();
   await slide('e', 180, 0, 450);
+  cry(B.enemy.id);
   await say(trainer ? `${trainer.name} veut se battre !` : `Un ${nm(B.enemy)} sauvage apparaît !`);
   if (trainer) await say(`${trainer.name} envoie ${nm(B.enemy)} !`);
   await sendOut(B.mi);
@@ -977,7 +1061,7 @@ async function battle(enemyTeam, trainer) {
 async function sendOut(i) {
   B.mi = i; B.dispM = G.team[i].hp; B.showM = true;
   renderIdle();
-  popIn('m'); beep(520, 0.1, 'triangle', 0.07, 300);
+  sfx.pop(); popIn('m'); setTimeout(() => cry(G.team[i].id), 250);
   await say(`Go, ${nm(G.team[i])} !`);
 }
 async function battleTurn() {
@@ -1003,7 +1087,7 @@ async function battleTurn() {
     const i = await chooseMon('Soigner qui ?', m => m.hp > 0 && m.hp < stats(m).hp);
     if (i === 'back') return null;
     const m = G.team[i], before = m.hp;
-    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.heal();
+    m.hp = Math.min(stats(m).hp, m.hp + 20); G.items.potion--; sfx.potion();
     if (i === B.mi) await until(hpSynced);
     await say(`${nm(m)} récupère ${m.hp - before} PV !`);
     return enemyAct();
@@ -1018,7 +1102,7 @@ async function battleTurn() {
   }
   // Fuite
   if (B.trainer) { await say('Impossible de fuir un duel de dresseur !'); return null; }
-  if (Math.random() < (stats(me).spd >= stats(B.enemy).spd ? 0.9 : 0.55)) { beep(600, 0.2, 'square', 0.05, -400); await say('Tu prends la fuite !'); return 'run'; }
+  if (Math.random() < (stats(me).spd >= stats(B.enemy).spd ? 0.9 : 0.55)) { sfx.run(); await say('Tu prends la fuite !'); return 'run'; }
   await say('Impossible de fuir !');
   return enemyAct();
 }
@@ -1032,14 +1116,16 @@ async function attack(side, id) {
   const A = side === 'm' ? G.team[B.mi] : B.enemy, D = side === 'm' ? B.enemy : G.team[B.mi], mv = MOVES[id];
   const label = side === 'e' ? `${nm(A)} ${B.trainer ? 'adverse' : 'sauvage'}` : nm(A);
   await say(`${label} utilise ${mv.name} !`);
-  if (Math.random() * 100 >= mv.acc) { await say('Mais l\'attaque échoue !'); return false; }
+  if (Math.random() * 100 >= mv.acc) { sfx.miss(); await say('Mais l\'attaque échoue !'); return false; }
+  sfx.attack(mv.type);
   await lunge(side);
+  await wait(mv.type === 'Spectre' || mv.type === 'Feu' ? 250 : 120);
   const e = eff(mv.type, SPECIES[D.id].type);
   if (e === 0) { await say(`Ça n'affecte pas ${nm(D)}...`); return false; }
   const sa = stats(A), sd = stats(D), crit = Math.random() < 1 / 16;
   let dmg = Math.floor(((2 * A.lvl / 5 + 2) * mv.pow * sa.atk / sd.def) / 50 + 2);
   dmg = Math.max(1, Math.floor(dmg * (mv.type === SPECIES[A.id].type ? 1.5 : 1) * e * (crit ? 1.5 : 1) * (0.85 + Math.random() * 0.15)));
-  sfx.hit(); await blink(side === 'm' ? 'e' : 'm');
+  sfx.hit(e); await blink(side === 'm' ? 'e' : 'm');
   D.hp = Math.max(0, D.hp - dmg);
   await until(hpSynced);
   if (crit) await say('Coup critique !');
@@ -1067,6 +1153,8 @@ async function enemyFainted() {
   await say(`${nm(en)} ${B.trainer ? 'adverse' : 'sauvage'} est K.O. !`);
   const sum = SPECIES[en.id].base.reduce((a, b) => a + b, 0);
   const gain = Math.floor((30 + sum / 6) * en.lvl / 4 * (B.trainer ? 1.5 : 1));
+  const last = !B.trainer || B.ei + 1 >= B.enemyTeam.length;
+  if (last) await wait(B.trainer ? sfx.victory() : sfx.winWild());
   await giveXp(G.team[B.mi], gain);
   B.ei++;
   if (B.trainer && B.ei < B.enemyTeam.length) {
@@ -1074,6 +1162,7 @@ async function enemyFainted() {
     Object.assign(B.e, { vis: true, alpha: 1, dy: 0, scale: 1 });
     renderIdle();
     await slide('e', 180, 0, 350);
+    cry(B.enemy.id);
     await say(`${B.trainer.name} envoie ${nm(B.enemy)} !`);
     return null;
   }
@@ -1102,7 +1191,7 @@ async function giveXp(m, x) {
 }
 async function learnMove(m, mv) {
   if (m.moves.includes(mv)) return;
-  if (m.moves.length < 4) { m.moves.push(mv); sfx.level(); return say(`${nm(m)} apprend ${MOVES[mv].name} !`); }
+  if (m.moves.length < 4) { m.moves.push(mv); sfx.learn(); return say(`${nm(m)} apprend ${MOVES[mv].name} !`); }
   await say(`${nm(m)} veut apprendre ${MOVES[mv].name}, mais connaît déjà 4 attaques.`);
   const c = await choose([...m.moves.map((id, i) => ({ value: i, html: moveHtml(id), cls: 'mv' })), { value: -1, label: 'Ne pas apprendre' }],
     { cols: 2, title: 'Oublier quelle attaque ?' });
@@ -1112,14 +1201,14 @@ async function learnMove(m, mv) {
 }
 async function throwBall() {
   const en = B.enemy;
-  beep(700, 0.15, 'triangle', 0.06, 400);
+  sfx.throw();
   const from = [50, 120], to = [192, 40];
   B.ball = { x: from[0], y: from[1], rot: 0 };
   for (let i = 1; i <= 26; i++) {
     const t = i / 26; B.ball.x = from[0] + (to[0] - from[0]) * t; B.ball.y = from[1] + (to[1] - from[1]) * t - Math.sin(t * Math.PI) * 50; B.ball.rot = t * 12;
     await wait(16);
   }
-  B.e.white = true; await wait(120);
+  B.e.white = true; sfx.absorb(); await wait(120);
   for (let i = 1; i <= 8; i++) { B.e.scale = 1 - i / 8; await wait(20); }
   B.e.vis = false; B.e.white = false;
   for (let i = 1; i <= 10; i++) { B.ball.y = 40 + i * 2.6; await wait(20); }
@@ -1129,7 +1218,7 @@ async function throwBall() {
   for (let k = 0; k < 3; k++) {
     await wait(450);
     if (Math.random() > pass) {
-      beep(200, 0.2, 'square', 0.06, 300);
+      sfx.breakout();
       B.ball = null; B.e.vis = true; B.e.scale = 1;
       await say(pick(['Oh non ! Il s\'est libéré !', 'Raaah ! C\'était presque ça !', 'Zut ! Presque !']));
       return false;
@@ -1153,7 +1242,7 @@ async function evolve(m, to) {
   const old = stats(m), oldName = nm(m);
   m.id = to; const s = stats(m); m.hp = Math.min(s.hp, m.hp + s.hp - old.hp);
   B.evo.show = to; B.evo.white = false; markSeen(to); G.caught[to] = 1;
-  sfx.level();
+  sfx.evolved();
   await say(`Félicitations ! ${oldName} a évolué en ${nm(m)} !`);
   for (const [l, mv] of SPECIES[to].learn) if (l === m.lvl) await learnMove(m, mv);
   B.evo = null;
@@ -1301,6 +1390,10 @@ function loop(t) {
   }
   if (G && topScene === 'world') updateWorld(dt);
   bottom.classList.toggle('talking', !!dlg && !menu);
+  if (B && !B.evo && topScene === 'battle' && B.showM) {
+    const me = G.team[B.mi];
+    if (me && me.hp > 0 && me.hp / stats(me).hp <= 0.2 && tick - (B.lastAlarm || 0) > 900) { B.lastAlarm = tick; sfx.lowHp(); }
+  }
   updateMusic(topScene === 'battle' ? 'battle' : topScene === 'world' ? 'world' : 'title');
   render();
   requestAnimationFrame(loop);
@@ -1414,14 +1507,14 @@ async function newGame() {
       value: id, cls: 'starter',
       html: `<img src="${spriteURL(id)}" alt=""><span>${SPECIES[id].name}</span><span class="type" style="background:${TYPES[SPECIES[id].type]}">${SPECIES[id].type}</span>`,
     })), { cols: 3, title: 'Choisis ton partenaire' });
-    introPick = s;
+    introPick = s; cry(s);
     await say(`${SPECIES[s].name}, le Monstre de type ${SPECIES[s].type}. ${SPECIES[s].desc}`);
     const ok = await choose([{ value: true, label: 'Oui !' }, { value: false, label: 'Non' }], { cols: 2, title: `Choisir ${SPECIES[s].name} ?`, cls: 'big' });
     if (ok) starter = s;
     else introPick = null;
   }
   G = { name, x: 5, y: 22, dir: 'down', team: [makeMon(starter, 5)], box: [], items: { ball: 5, potion: 3 }, flags: {}, seen: { [starter]: 1 }, caught: { [starter]: 1 } };
-  sfx.catch();
+  sfx.item();
   await say(`Tu reçois ${SPECIES[starter].name} ! Prends-en bien soin.`);
   await say('Le Champion Orion t\'attend tout au nord. Passe me voir près de chez toi, j\'ai un cadeau !');
   introPick = null; topScene = 'world'; save(); renderIdle();
