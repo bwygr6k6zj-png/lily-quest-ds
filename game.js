@@ -197,7 +197,13 @@ const NPCS = [
 ];
 NPCS.forEach(n => { n.hx = n.x; n.hy = n.y; n.hdir = n.dir; });
 const npcAt = (x, y) => NPCS.find(n => n.x === x && n.y === y);
-const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y);
+// Objets cachés : une étincelle à ramasser avec A (une seule fois par partie)
+const ITEMS = [
+  { id: 'spark1', x: 11, y: 16, item: 'potion', qty: 1 },
+];
+const ITEM_NAMES = { potion: 'Potion', ball: 'Ball' };
+const itemAt = (x, y) => G && ITEMS.find(i => i.x === x && i.y === y && !G.flags[i.id]);
+const walkable = (x, y) => !SOLID.has(tileAt(x, y)) && !npcAt(x, y) && !itemAt(x, y);
 
 const TIPS = [
   'Prof. Lilas : Affaiblis un Monstre avant de lancer une Ball, tu auras plus de chances !',
@@ -683,9 +689,17 @@ function interact() {
   const [dx, dy] = DIRS[G.dir], tx = G.x + dx, ty = G.y + dy;
   const n = npcAt(tx, ty);
   if (n) return runEvent(() => talk(n));
+  const it = itemAt(tx, ty);
+  if (it) return runEvent(() => pickUp(it));
   const ch = tileAt(tx, ty);
   if (ch === 'S') return runEvent(() => say(SIGNS[`${tx},${ty}`] || '...'));
   if (ch === 'X') return runEvent(() => say(G.flags.champ ? 'L\'Arène. Ton portrait de Champion·ne est accroché à l\'entrée !' : 'Arène de la région. Le Champion Orion en garde l\'entrée.'));
+}
+async function pickUp(it) {
+  G.flags[it.id] = 1;
+  G.items[it.item] = (G.items[it.item] || 0) + it.qty;
+  sfx.catch(); save(); renderIdle();
+  await say(`Tu ramasses l'étincelle... Tu as trouvé ${it.qty > 1 ? it.qty + ' ' : 'une '}${ITEM_NAMES[it.item]} !`);
 }
 async function talk(n) {
   n.dir = OPP[G.dir];
@@ -1063,6 +1077,7 @@ function drawWorld(g) {
   const px = P.moving ? P.fx + (G.x - P.fx) * P.t : G.x, py = P.moving ? P.fy + (G.y - P.fy) * P.t : G.y;
   const camX = clamp(Math.round(px * 16 + 8 - 128), 0, MW * 16 - 256), camY = clamp(Math.round(py * 16 + 8 - 96), 0, MH * 16 - 192);
   g.drawImage(mapFrames[Math.floor(tick / 500) % 2], camX, camY, 256, 192, 0, 0, 256, 192);
+  for (const it of ITEMS) if (!G.flags[it.id]) drawSparkle(g, it.x * 16 - camX, it.y * 16 - camY);
   const ents = NPCS.map(n => ({ y: n.y, draw: () => drawPerson(g, n.x * 16 - camX, n.y * 16 - camY - 3, n.dir, 0, n.colors) }));
   const step = P.moving && P.t > 0.2 && P.t < 0.8 ? P.step : 0;
   ents.push({ y: py, draw: () => drawPerson(g, Math.round(px * 16) - camX, Math.round(py * 16) - camY - 3, G.dir, step, HERO) });
@@ -1075,6 +1090,15 @@ function drawWorld(g) {
     g.fillStyle = '#222'; g.fillRect(x - 1, y - 1, 12, 13); g.fillStyle = '#fff'; g.fillRect(x, y, 10, 11);
     txt(g, '!', x + 2, y + 2, '#e03848');
   }
+}
+function drawSparkle(g, x, y) {
+  const r = (a, b, w, h, c) => { g.fillStyle = c; g.fillRect(x + a, y + b, w, h); };
+  const big = Math.floor(tick / 300) % 2, phase = Math.floor(tick / 250) % 3;
+  r(4, 13, 8, 2, 'rgba(0,0,0,.15)');
+  r(7, 2 - big, 2, 12 + big * 2, '#ffc53a'); r(2 - big, 7, 12 + big * 2, 2, '#ffc53a');
+  r(6, 5, 4, 6, '#ffe680'); r(5, 6, 6, 4, '#ffe680'); r(7, 6, 2, 4, '#ffffff'); r(6, 7, 4, 2, '#ffffff');
+  if (phase === 0) { r(2, 2, 1, 1, '#ffffff'); r(13, 12, 1, 1, '#ffffff'); }
+  else if (phase === 1) { r(13, 3, 1, 1, '#ffffff'); r(2, 12, 1, 1, '#ffffff'); }
 }
 function drawBall(g, x, y, rot) {
   g.save(); g.translate(x, y); g.rotate(rot);
