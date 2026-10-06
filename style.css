@@ -1,7 +1,7 @@
 :root {
-  --shell: #f7cfe0;
-  --shell-2: #eab0c8;
-  --shell-edge: #c98aa6;
+  --shell: #c9a8f0;
+  --shell-2: #a77fe0;
+  --shell-edge: #7a52b8;
   --frame: #2a2a33;
   --ink: #1d2440;
 }
@@ -33,12 +33,12 @@ button { font-family: inherit; }
 }
 .speaker {
   width: 34px; height: 60px; flex: none;
-  background: radial-gradient(circle, #9a6a80 1.6px, transparent 2.2px) 0 0 / 8px 8px;
+  background: radial-gradient(circle, #5e3d94 1.6px, transparent 2.2px) 0 0 / 8px 8px;
   opacity: .8;
 }
 .hinge {
   width: 90%; height: 18px; position: relative;
-  background: linear-gradient(#a96d87, #e2abc2 45%, #a96d87);
+  background: linear-gradient(#7d55bd, #bb98ec 45%, #7d55bd);
   border-radius: 6px;
 }
 .led { position: absolute; right: 18px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: #7dff9a; box-shadow: 0 0 8px #7dff9a; }
@@ -91,7 +91,7 @@ button { font-family: inherit; }
 .btn.b { bottom: 0; left: 39px; color: #c0304a; }
 .startselect { grid-area: ss; display: flex; gap: 16px; }
 .startselect button {
-  font-size: 7px; color: #7a4a60; background: var(--shell-2); border: 0; cursor: pointer;
+  font-size: 7px; color: #3f2470; background: var(--shell-2); border: 0; cursor: pointer;
   padding: 7px 12px; border-radius: 20px; box-shadow: inset 0 -2px 0 var(--shell-edge);
 }
 .startselect button:active { box-shadow: inset 0 2px 0 var(--shell-edge); }
