@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lily Quest DS</title>
+<meta name="description" content="Un petit RPG de capture de monstres façon console DS, jouable dans le navigateur.">
+<meta name="theme-color" content="#1a1230">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23fff' stroke='%23222' stroke-width='8'/><path d='M6 50a44 44 0 0 1 88 0z' fill='%23e33'/><rect x='6' y='46' width='88' height='8' fill='%23222'/><circle cx='50' cy='50' r='13' fill='%23fff' stroke='%23222' stroke-width='7'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="ds">
+  <section class="shell top-shell">
+    <div class="speaker"></div>
+    <div class="screen-frame"><canvas id="top" width="256" height="192" aria-label="Écran du haut"></canvas></div>
+    <div class="speaker"></div>
+  </section>
+  <div class="hinge"><span class="led"></span></div>
+  <section class="shell bottom-shell">
+    <div class="dpad" id="dpad">
+      <button class="up" data-dir="up" aria-label="Haut"></button>
+      <button class="left" data-dir="left" aria-label="Gauche"></button>
+      <span class="center"></span>
+      <button class="right" data-dir="right" aria-label="Droite"></button>
+      <button class="down" data-dir="down" aria-label="Bas"></button>
+    </div>
+    <div class="screen-frame bottom-frame"><div id="bottom" class="bottom-screen"></div></div>
+    <div class="abxy">
+      <button class="btn x" id="btnX" aria-label="X (menu)">X</button>
+      <button class="btn y" id="btnY" aria-label="Y (son)">Y</button>
+      <button class="btn a" id="btnA" aria-label="A">A</button>
+      <button class="btn b" id="btnB" aria-label="B">B</button>
+    </div>
+    <div class="startselect">
+      <button id="btnSelect">SELECT</button>
+      <button id="btnStart">START</button>
+    </div>
+  </section>
+</main>
+<p class="help">Flèches / ZQSD : bouger · Espace / Entrée : A · Échap : B · M : menu · N : son</p>
+<script src="game.js"></script>
+</body>
+</html>
